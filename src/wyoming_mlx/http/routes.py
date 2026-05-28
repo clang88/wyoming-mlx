@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import io
 import wave
 from collections.abc import AsyncIterator
@@ -21,6 +22,9 @@ class SpeechRequest(BaseModel):
     response_format: str = "wav"
 
 
+_ALLOWED_AUDIO_FORMATS = {"WAV", "FLAC", "OGG", "MP3"}
+
+
 def _require_api_key(api_keys: set[str]):
     def dep(request: Request) -> None:
         auth = request.headers.get("authorization", "")
@@ -29,7 +33,9 @@ def _require_api_key(api_keys: set[str]):
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
             )
         token = auth[7:].strip()
-        if token not in api_keys:
+        if not api_keys or not any(
+            hmac.compare_digest(token, key) for key in api_keys
+        ):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid api key"
             )
@@ -39,6 +45,26 @@ def _require_api_key(api_keys: set[str]):
 
 def _decode_audio_to_pcm16_mono(raw: bytes) -> tuple[bytes, int]:
     """Decode an uploaded audio file to int16 mono PCM and return (pcm, sample_rate)."""
+    if len(raw) < 12:
+        raise HTTPException(status_code=400, detail="audio file too small")
+
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WAVE":
+        detected = "WAV"
+    elif raw[:4] == b"fLaC":
+        detected = "FLAC"
+    elif raw[:4] == b"OggS":
+        detected = "OGG"
+    elif raw[:2] in (b"\xff\xfb", b"\xff\xfa"):
+        detected = "MP3"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="unsupported audio format; only WAV, FLAC, OGG, MP3 accepted",
+        )
+
+    if detected not in _ALLOWED_AUDIO_FORMATS:
+        raise HTTPException(status_code=400, detail=f"audio format {detected} not allowed")
+
     data, rate = sf.read(io.BytesIO(raw), dtype="int16", always_2d=True)
     mono = data.mean(axis=1).astype(np.int16) if data.shape[1] > 1 else data[:, 0]
     return mono.tobytes(), int(rate)
@@ -81,7 +107,11 @@ def build_router(
         file: UploadFile = File(...),  # noqa: B008
         model: str | None = Form(None),
     ) -> dict:
+        if file.size is not None and file.size > 100_000_000:
+            raise HTTPException(status_code=413, detail="audio file exceeds 100MB limit")
         raw = await file.read()
+        if file.size is None and len(raw) > 100_000_000:
+            raise HTTPException(status_code=413, detail="audio file exceeds 100MB limit")
         pcm, rate = _decode_audio_to_pcm16_mono(raw)
         text = await stt.transcribe(pcm, rate)
         return {"text": text}
@@ -92,6 +122,12 @@ def build_router(
             raise HTTPException(
                 status_code=400,
                 detail=f"unsupported response_format: {req.response_format}",
+            )
+
+        if req.voice not in tts.voices:
+            raise HTTPException(
+                status_code=400,
+                detail=f"unknown voice: {req.voice!r}, expected one of {tts.voices}",
             )
 
         async def stream() -> AsyncIterator[bytes]:

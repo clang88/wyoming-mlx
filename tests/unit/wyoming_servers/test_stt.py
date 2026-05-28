@@ -102,3 +102,28 @@ async def test_stt_handler_responds_to_describe():
     assert len(info_events) == 1
     result_info = Info.from_event(info_events[0])
     assert isinstance(result_info, Info)
+
+
+@pytest.mark.asyncio
+async def test_stt_handler_rejects_overflowing_audio():
+    backend = FakeSTTBackend(transcript="x")
+    handler = SttEventHandler(
+        reader=MagicMock(spec=asyncio.StreamReader),
+        writer=AsyncMock(),
+        backend=backend,
+        info=Info(),
+        max_audio_bytes=10,
+    )
+
+    await handler.handle_event(
+        AudioStart(rate=16000, width=2, channels=1).event()
+    )
+    result = await handler.handle_event(
+        AudioChunk(rate=16000, width=2, channels=1, audio=b"\x01\x02").event()
+    )
+    assert result is True
+    result = await handler.handle_event(
+        AudioChunk(rate=16000, width=2, channels=1, audio=b"\x03" * 10).event()
+    )
+    assert result is False
+    assert backend.calls == []

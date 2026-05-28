@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from wyoming_mlx.backends.base import STTBackend, TTSBackend
+from wyoming_mlx.config import ModelsConfig
 from wyoming_mlx.http.routes import build_router
 
 

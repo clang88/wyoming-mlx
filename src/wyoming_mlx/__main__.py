@@ -121,7 +121,8 @@ async def run_servers(
     stt_server_task = asyncio.create_task(
         stt_server.run(
             lambda reader, writer: SttEventHandler(
-                reader, writer, backend=stt, info=stt_info
+                reader, writer, backend=stt, info=stt_info,
+                max_audio_bytes=cfg.wyoming.stt_max_audio_bytes,
             ),
         ),
         name="stt-server",

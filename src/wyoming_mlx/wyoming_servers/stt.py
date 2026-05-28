@@ -28,12 +28,14 @@ class SttEventHandler(AsyncEventHandler):
         *,
         backend: STTBackend,
         info: Info,
+        max_audio_bytes: int = 100_000_000,
     ) -> None:
         super().__init__(reader=reader, writer=writer)
         self._backend = backend
         self._info = info
         self._buffer = bytearray()
         self._sample_rate: int | None = None
+        self._max_audio_bytes = max_audio_bytes
 
     async def handle_event(self, event: Event) -> bool:
         if Describe.is_type(event.type):
@@ -48,6 +50,11 @@ class SttEventHandler(AsyncEventHandler):
 
         if AudioChunk.is_type(event.type):
             chunk = AudioChunk.from_event(event)
+            if len(self._buffer) + len(chunk.audio) > self._max_audio_bytes:
+                log.warning("STT audio buffer exceeded limit of %d bytes", self._max_audio_bytes)
+                self._buffer.clear()
+                self._sample_rate = None
+                return False
             self._buffer.extend(chunk.audio)
             if self._sample_rate is None:
                 self._sample_rate = chunk.rate

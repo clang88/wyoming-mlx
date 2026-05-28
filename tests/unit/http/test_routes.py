@@ -2,9 +2,11 @@ import io
 import wave
 
 import pytest
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from wyoming_mlx.backends.fake import FakeSTTBackend, FakeTTSBackend
+from wyoming_mlx.config import ModelsConfig
 from wyoming_mlx.http.app import create_app
 
 
@@ -30,7 +32,7 @@ def app():
         stt=stt,
         tts=tts,
         api_keys={"sekret"},
-        whisper_model_id="mlx-community/distil-whisper-large-v3",
+        models=ModelsConfig(whisper="mlx-community/distil-whisper-large-v3"),
     )
 
 
@@ -114,3 +116,36 @@ async def test_speech_rejects_unsupported_format(client):
         json={"input": "hello", "voice": "alice", "response_format": "mp3"},
     )
     assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_transcriptions_rejects_large_file(client):
+    large_wav = _wav_bytes(b"\x00" * 200_000_000)
+    r = await client.post(
+        "/v1/audio/transcriptions",
+        headers={"Authorization": "Bearer sekret"},
+        files={"file": ("big.wav", large_wav, "audio/wav")},
+    )
+    assert r.status_code == 413
+    assert "exceeds" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_transcriptions_rejects_unknown_magic():
+    from wyoming_mlx.http.routes import _decode_audio_to_pcm16_mono
+
+    with pytest.raises(HTTPException) as exc_info:
+        _decode_audio_to_pcm16_mono(b"This is not audio")
+    assert exc_info.value.status_code == 400
+    assert "unsupported audio format" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_speech_rejects_unknown_voice(client):
+    r = await client.post(
+        "/v1/audio/speech",
+        headers={"Authorization": "Bearer sekret"},
+        json={"input": "hello", "voice": "nonexistent_voice"},
+    )
+    assert r.status_code == 400
+    assert "unknown voice" in r.json()["detail"]
