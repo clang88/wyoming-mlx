@@ -18,8 +18,7 @@ class MLXWhisperBackend:
         try:
             result: dict = mlx_whisper.transcribe(  # type: ignore[assignment]
                 pcm,
-                model=self._model_id,
-                device="metal",
+                path_or_hf_repo=self._model_id,
                 fp16=True,
             )
         except Exception:
