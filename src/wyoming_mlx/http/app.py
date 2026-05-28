@@ -10,7 +10,7 @@ def create_app(
     stt: STTBackend,
     tts: TTSBackend,
     api_keys: set[str],
-    whisper_model_id: str,
+    models: ModelsConfig,
 ) -> FastAPI:
     app = FastAPI(title="wyoming-mlx", version="0.1.0")
     app.include_router(
@@ -18,7 +18,7 @@ def create_app(
             stt=stt,
             tts=tts,
             api_keys=api_keys,
-            whisper_model_id=whisper_model_id,
+            models=models,
         )
     )
     return app

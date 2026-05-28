@@ -103,7 +103,7 @@ async def run_servers(
         stt=stt,
         tts=tts,
         api_keys=api_keys,
-        whisper_model_id=cfg.models.whisper,
+        models=cfg.models,
     )
     http_config = uvicorn.Config(
         app,

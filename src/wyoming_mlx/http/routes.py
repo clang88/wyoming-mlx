@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from wyoming_mlx.backends.base import STTBackend, TTSBackend
+from wyoming_mlx.config import ModelsConfig
 
 
 class SpeechRequest(BaseModel):
@@ -59,7 +60,7 @@ def build_router(
     stt: STTBackend,
     tts: TTSBackend,
     api_keys: set[str],
-    whisper_model_id: str,
+    models: ModelsConfig,
 ) -> APIRouter:
     router = APIRouter()
     auth = Depends(_require_api_key(api_keys))
@@ -71,7 +72,7 @@ def build_router(
             for v in tts.voices
         ]
         data.append(
-            {"id": whisper_model_id, "object": "model", "owned_by": "wyoming-mlx"}
+            {"id": models.whisper, "object": "model", "owned_by": "wyoming-mlx"}
         )
         return {"object": "list", "data": data}
 
