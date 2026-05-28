@@ -1,8 +1,6 @@
 import os
 from pathlib import Path
 
-import pytest
-
 from wyoming_mlx.auth import load_api_keys
 
 

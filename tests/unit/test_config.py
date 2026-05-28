@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from wyoming_mlx.config import Config, load_config
+from wyoming_mlx.config import load_config
 
 
 def test_defaults_when_no_file_no_env(monkeypatch: pytest.MonkeyPatch):
