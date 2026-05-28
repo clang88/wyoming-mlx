@@ -161,28 +161,26 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def _apply_cli_overrides(cfg: Config, args: argparse.Namespace) -> None:
     """Override config values with CLI arguments (non-None)."""
-    if args.stt_host is not None:
-        cfg.wyoming.stt_host = args.stt_host
-    if args.stt_port is not None:
-        cfg.wyoming.stt_port = args.stt_port
-    if args.tts_host is not None:
-        cfg.wyoming.tts_host = args.tts_host
-    if args.tts_port is not None:
-        cfg.wyoming.tts_port = args.tts_port
-    if args.http_host is not None:
-        cfg.http.host = args.http_host
-    if args.http_port is not None:
-        cfg.http.port = args.http_port
-    if args.http_api_keys_file is not None:
-        cfg.http.api_keys_file = args.http_api_keys_file
-    if args.whisper_model is not None:
-        cfg.models.whisper = args.whisper_model
-    if args.kokoro_model is not None:
-        cfg.models.kokoro = args.kokoro_model
-    if args.kokoro_default_voice is not None:
-        cfg.models.kokoro_default_voice = args.kokoro_default_voice
-    if args.log_level is not None:
-        cfg.logging.level = args.log_level
+    overrides: list[tuple[str, str, object]] = [
+        ("wyoming.stt_host", "stt_host", args.stt_host),
+        ("wyoming.stt_port", "stt_port", args.stt_port),
+        ("wyoming.tts_host", "tts_host", args.tts_host),
+        ("wyoming.tts_port", "tts_port", args.tts_port),
+        ("http.host", "http_host", args.http_host),
+        ("http.port", "http_port", args.http_port),
+        ("http.api_keys_file", "http_api_keys_file", args.http_api_keys_file),
+        ("models.whisper", "whisper_model", args.whisper_model),
+        ("models.kokoro", "kokoro_model", args.kokoro_model),
+        ("models.kokoro_default_voice", "kokoro_default_voice", args.kokoro_default_voice),
+        ("logging.level", "log_level", args.log_level),
+    ]
+    for dotpath, attr, value in overrides:
+        if value is not None:
+            obj = cfg
+            parts = dotpath.split(".")
+            for part in parts[:-1]:
+                obj = getattr(obj, part)
+            setattr(obj, parts[-1], value)
 
 
 def main(argv: list[str] | None = None) -> None:
