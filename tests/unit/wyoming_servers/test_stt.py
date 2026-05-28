@@ -28,9 +28,15 @@ async def test_stt_handler_emits_transcript_after_audio_stop():
     writer = _Capture()
     handler = SttEventHandler(backend=backend, writer=writer)
 
-    assert await handler.handle_event(AudioStart(rate=16000, width=2, channels=1).event())
-    assert await handler.handle_event(AudioChunk(rate=16000, width=2, channels=1, audio=_pcm_chunk()).event())
-    assert await handler.handle_event(AudioChunk(rate=16000, width=2, channels=1, audio=_pcm_chunk()).event())
+    assert await handler.handle_event(
+        AudioStart(rate=16000, width=2, channels=1).event()
+    )
+    assert await handler.handle_event(
+        AudioChunk(rate=16000, width=2, channels=1, audio=_pcm_chunk()).event()
+    )
+    assert await handler.handle_event(
+        AudioChunk(rate=16000, width=2, channels=1, audio=_pcm_chunk()).event()
+    )
     assert await handler.handle_event(AudioStop().event())
 
     transcripts = [Transcript.from_event(e) for e in writer.events if Transcript.is_type(e.type)]
@@ -42,9 +48,15 @@ async def test_stt_handler_emits_transcript_after_audio_stop():
 async def test_stt_handler_passes_concatenated_audio_to_backend():
     backend = FakeSTTBackend(transcript="x")
     handler = SttEventHandler(backend=backend, writer=_Capture())
-    await handler.handle_event(AudioStart(rate=16000, width=2, channels=1).event())
-    await handler.handle_event(AudioChunk(rate=16000, width=2, channels=1, audio=b"\x01\x02").event())
-    await handler.handle_event(AudioChunk(rate=16000, width=2, channels=1, audio=b"\x03\x04").event())
+    await handler.handle_event(
+        AudioStart(rate=16000, width=2, channels=1).event()
+    )
+    await handler.handle_event(
+        AudioChunk(rate=16000, width=2, channels=1, audio=b"\x01\x02").event()
+    )
+    await handler.handle_event(
+        AudioChunk(rate=16000, width=2, channels=1, audio=b"\x03\x04").event()
+    )
     await handler.handle_event(AudioStop().event())
 
     assert len(backend.calls) == 1
