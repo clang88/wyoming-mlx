@@ -1,4 +1,8 @@
-"""Test configuration for wyoming-mlx."""
+"""Test configuration for wyoming-mlx.
+
+Integration tests (marked with -m "integration") are skipped by default.
+Run them with: uv run pytest --integration
+"""
 
 import pytest
 
@@ -14,7 +18,7 @@ def pytest_addoption(parser):
 
 def pytest_collection_modifyitems(config, items):
     if config.getoption("--integration"):
-        return  # All tests collected, no filtering needed
+        return
     skip_integration = pytest.mark.skip(
         "Run with --integration flag to execute integration tests"
     )

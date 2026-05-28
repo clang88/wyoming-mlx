@@ -31,7 +31,7 @@ packages = ["src/wyoming_mlx"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [
-    "integration: marks tests requiring real MLX models (deselect with '-m \"not integration\")",
+    "integration: marks tests requiring real MLX models (auto-skipped, use --integration to run)",
 ]
 testpaths = ["tests"]
 
