@@ -45,6 +45,8 @@ class TtsEventHandler(AsyncEventHandler):
 
         synth = Synthesize.from_event(event)
         text = synth.text or ""
+        if not text:
+            return True
         requested = getattr(synth.voice, "name", None) if synth.voice else None
         voice = requested or self._default_voice
 
