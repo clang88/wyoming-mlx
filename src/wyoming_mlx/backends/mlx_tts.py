@@ -69,8 +69,12 @@ class KokoroBackend:
         generator = pipeline(text, voice=v)  # pyright: ignore
         buf = io.BytesIO()
         async with self._lock:
+            # Serialize all MPS work: the generator yields torch.Tensor results
+            # from the Kokoro pipeline, which must stay on CPU for detach/cpu().
+            # The lock is released before the yield loop below, so the consumer
+            # reads chunks without holding the lock.
             for result in generator:
-                audio = result.audio  # torch.Tensor on CPU
+                audio = result.audio
                 assert audio is not None
                 arr = audio.detach().cpu().numpy().astype(np.float32)
                 # int16 PCM
