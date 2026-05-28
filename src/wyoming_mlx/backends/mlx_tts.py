@@ -62,8 +62,11 @@ class KokoroBackend:
         return self._pipeline
 
     async def synthesize(self, text: str, voice: str | None = None) -> AsyncIterator[bytes]:
+        v = voice or self._voice
+        if v not in self.voices:
+            raise ValueError(f"unknown voice: {v!r}, expected one of {self.voices}")
         pipeline = self._ensure_pipeline()
-        generator = pipeline(text, voice=voice or self._voice)  # pyright: ignore
+        generator = pipeline(text, voice=v)  # pyright: ignore
         buf = io.BytesIO()
         async with self._lock:
             for result in generator:

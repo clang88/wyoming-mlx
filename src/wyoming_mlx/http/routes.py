@@ -93,10 +93,6 @@ def build_router(
                 status_code=400,
                 detail=f"unsupported response_format: {req.response_format}",
             )
-        if req.voice not in tts.voices:
-            raise HTTPException(
-                status_code=400, detail=f"unknown voice: {req.voice}"
-            )
 
         async def stream() -> AsyncIterator[bytes]:
             yield _wav_header(tts.sample_rate)
