@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import sys
 from pathlib import Path
 
 import uvicorn
-from wyoming.event import Event
 from wyoming.info import (
     AsrModel,
     AsrProgram,
@@ -19,7 +17,7 @@ from wyoming.info import (
     TtsProgram,
     TtsVoice,
 )
-from wyoming.server import AsyncServer, async_read_event
+from wyoming.server import AsyncServer
 
 from wyoming_mlx.auth import load_api_keys
 from wyoming_mlx.backends.base import STTBackend, TTSBackend
@@ -30,20 +28,7 @@ from wyoming_mlx.wyoming_servers.tts import TtsEventHandler
 
 log = logging.getLogger(__name__)
 
-
-class _AsyncWriter:
-    """Adapts an asyncio.StreamWriter to the _Writer protocol used by handler classes."""
-
-    def __init__(self, writer: asyncio.StreamWriter) -> None:
-        self._writer = writer
-
-    async def write_event(self, event: Event) -> None:
-        data = event.to_dict()
-        json_line = json.dumps({"type": event.type, **data}, ensure_ascii=False)
-        self._writer.writelines((json_line.encode(), b"\n"))
-        if event.payload:
-            self._writer.write(event.payload)
-        await self._writer.drain()
+_PROJECT_URL = "https://github.com/rnorth/wyoming-mlx"
 
 
 def _build_stt_info(model_id: str) -> Info:
@@ -51,14 +36,14 @@ def _build_stt_info(model_id: str) -> Info:
         asr=[
             AsrProgram(
                 name="wyoming-mlx",
-                attribution=Attribution(name="wyoming-mlx", url=""),
+                attribution=Attribution(name="wyoming-mlx", url=_PROJECT_URL),
                 installed=True,
                 description="MLX whisper STT",
                 version="0.1.0",
                 models=[
                     AsrModel(
                         name=model_id,
-                        attribution=Attribution(name="OpenAI/MLX", url=""),
+                        attribution=Attribution(name="OpenAI/MLX", url=_PROJECT_URL),
                         installed=True,
                         description=model_id,
                         version="0.1.0",
@@ -75,14 +60,14 @@ def _build_tts_info(voices: list[str]) -> Info:
         tts=[
             TtsProgram(
                 name="wyoming-mlx",
-                attribution=Attribution(name="wyoming-mlx", url=""),
+                attribution=Attribution(name="wyoming-mlx", url=_PROJECT_URL),
                 installed=True,
                 description="MLX Kokoro TTS",
                 version="0.1.0",
                 voices=[
                     TtsVoice(
                         name=v,
-                        attribution=Attribution(name="Kokoro", url=""),
+                        attribution=Attribution(name="Kokoro", url=_PROJECT_URL),
                         installed=True,
                         description=v,
                         version="0.1.0",
@@ -93,55 +78,6 @@ def _build_tts_info(voices: list[str]) -> Info:
             )
         ],
     )
-
-
-def _stt_handler_factory(
-    backend: STTBackend,
-    info: Info,
-) -> type:
-    """Return a handler class for the Wyoming STT server."""
-
-    class _H:
-        def __init__(self, reader, writer):
-            self._inner = SttEventHandler(backend=backend, writer=_AsyncWriter(writer))
-            self._reader = reader
-
-        async def run(self):
-            while True:
-                event = await async_read_event(self._reader)
-                if event is None:
-                    return
-                if not await self._inner.handle_event(event):
-                    return
-
-    return _H
-
-
-def _tts_handler_factory(
-    backend: TTSBackend,
-    default_voice: str,
-    info: Info,
-) -> type:
-    """Return a handler class for the Wyoming TTS server."""
-
-    class _H:
-        def __init__(self, reader, writer):
-            self._inner = TtsEventHandler(
-                backend=backend,
-                writer=_AsyncWriter(writer),
-                default_voice=default_voice,
-            )
-            self._reader = reader
-
-        async def run(self):
-            while True:
-                event = await async_read_event(self._reader)
-                if event is None:
-                    return
-                if not await self._inner.handle_event(event):
-                    return
-
-    return _H
 
 
 async def run_servers(
@@ -184,16 +120,16 @@ async def run_servers(
 
     stt_server_task = asyncio.create_task(
         stt_server.run(
-            _stt_handler_factory(backend=stt, info=stt_info),
+            lambda reader, writer: SttEventHandler(
+                reader, writer, backend=stt, info=stt_info
+            ),
         ),
         name="stt-server",
     )
     tts_server_task = asyncio.create_task(
         tts_server.run(
-            _tts_handler_factory(
-                backend=tts,
-                default_voice=cfg.models.kokoro_default_voice,
-                info=tts_info,
+            lambda reader, writer: TtsEventHandler(
+                reader, writer, backend=tts, default_voice=cfg.models.kokoro_default_voice, info=tts_info
             ),
         ),
         name="tts-server",

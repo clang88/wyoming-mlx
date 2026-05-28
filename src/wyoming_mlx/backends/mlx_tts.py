@@ -22,7 +22,7 @@ class KokoroBackend:
 
     def __init__(
         self,
-        model_id: str = "prince-canuma/Kokoro-82M",
+        model_id: str = "mlx-community/Kokoro-82M-bf16",
         voice: str = "af_heart",
     ) -> None:
         if not _kokoro_ok:
@@ -58,12 +58,12 @@ class KokoroBackend:
     def _ensure_pipeline(self) -> object:
         if self._pipeline is None:
             assert _KPipeline is not None, "kokoro is not installed"
-            self._pipeline = _KPipeline(lang_code="a", device="mps")
+            self._pipeline = _KPipeline(lang_code="a", repo_id=self._model_id, device="mps")
         return self._pipeline
 
-    async def synthesize(self, text: str, voice: str) -> AsyncIterator[bytes]:
+    async def synthesize(self, text: str, voice: str | None = None) -> AsyncIterator[bytes]:
         pipeline = self._ensure_pipeline()
-        generator = pipeline(text, voice=voice)  # pyright: ignore
+        generator = pipeline(text, voice=voice or self._voice)  # pyright: ignore
         buf = io.BytesIO()
         async with self._lock:
             for result in generator:
