@@ -1,0 +1,39 @@
+"""Integration test: TTS → STT round-trip with real MLX models."""
+
+import pytest
+
+from wyoming_mlx.backends.mlx_stt import MLXWhisperBackend
+from wyoming_mlx.backends.mlx_tts import KokoroBackend
+
+
+async def test_tts_stt_roundtrip():
+    """Kokoro synthesises → Whisper transcribes → transcript shares words with input."""
+    # Skip unless --integration flag is passed
+    pytest.importorskip("mlx_whisper")
+    pytest.importorskip("kokoro")
+
+    tts = KokoroBackend(voice="af_heart")
+    stt = MLXWhisperBackend()
+
+    text = "The quick brown fox jumps over the lazy dog"
+
+    # Synthesise
+    audio_chunks = []
+    async for chunk in tts.synthesize(text, "af_heart"):
+        audio_chunks.append(chunk)
+    audio = b"".join(audio_chunks)
+    assert len(audio) > 0, "TTS produced no audio output"
+
+    # Transcribe
+    transcript = await stt.transcribe(audio, tts.sample_rate)
+    assert transcript, "STT produced empty transcript"
+
+    # Check word overlap (at least 50%)
+    original_words = set(text.lower().split())
+    transcribed_words = set(transcript.lower().split())
+    overlap = original_words & transcribed_words
+    ratio = len(overlap) / len(original_words) if original_words else 0
+    assert ratio >= 0.5, (
+        f"Word overlap too low: {ratio:.0%} — "
+        f"original={original_words}, transcript='{transcript.strip()}'"
+    )
