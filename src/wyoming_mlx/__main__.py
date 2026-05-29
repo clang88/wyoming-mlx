@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import atexit
 import logging
+import multiprocessing
 import sys
 from pathlib import Path
 
@@ -211,6 +213,16 @@ def main(argv: list[str] | None = None) -> None:
 
     stt_backend = MLXWhisperBackend(model_id=cfg.models.whisper)
     tts_backend = KokoroBackend(model_id=cfg.models.kokoro, voice=cfg.models.kokoro_default_voice)
+
+    # Suppress misaki's leaked semaphore warning at shutdown (multiprocessing
+    # resource tracker retains a semaphore that is never closed).
+    def _cleanup_mp() -> None:
+        try:
+            multiprocessing.resource_tracker._resource_tracker.shutdown()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    atexit.register(_cleanup_mp)
 
     asyncio.run(run_servers(cfg=cfg, stt=stt_backend, tts=tts_backend, api_keys=api_keys))
 
