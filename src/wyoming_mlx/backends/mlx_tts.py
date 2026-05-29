@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import warnings
 from collections.abc import AsyncIterator
 
 import numpy as np
@@ -77,15 +78,19 @@ class KokoroBackend:
             # from the Kokoro pipeline, which must stay on CPU for detach/cpu().
             # The lock is released before the yield loop below, so the consumer
             # reads chunks without holding the lock.
-            for result in generator:
-                audio = result.audio
-                assert audio is not None
-                if audio.numel() == 0:
-                    continue
-                arr = audio.detach().cpu().numpy().astype(np.float32)
-                # int16 PCM
-                pcm = (arr * 32767).astype(np.int16).tobytes()
-                buf.write(pcm)
+            # Suppress Kokoro internal STFT resize warnings (PyTorch bug with
+            # empty/half-empty harmonic source tensors — harmless, ignored).
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*was resized since it had shape.*")
+                for result in generator:
+                    audio = result.audio
+                    assert audio is not None
+                    if audio.numel() == 0:
+                        continue
+                    arr = audio.detach().cpu().numpy().astype(np.float32)
+                    # int16 PCM
+                    pcm = (arr * 32767).astype(np.int16).tobytes()
+                    buf.write(pcm)
         # Yield in chunks
         data = buf.getvalue()
         chunk_size = 4096
