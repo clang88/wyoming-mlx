@@ -4,11 +4,29 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from math import gcd
 
 import mlx_whisper
 import numpy as np
+from scipy.signal import resample_poly
 
 log = logging.getLogger(__name__)
+
+WHISPER_SAMPLE_RATE = 16000
+
+
+def _resample_to_16k(pcm: np.ndarray, sample_rate: int) -> np.ndarray:
+    """Resample float32 mono audio to Whisper's required 16 kHz.
+
+    Whisper produces empty/garbled transcripts when fed audio at the wrong
+    rate, since its mel spectrogram is computed assuming 16 kHz input.
+    """
+    if sample_rate == WHISPER_SAMPLE_RATE:
+        return pcm
+    g = gcd(sample_rate, WHISPER_SAMPLE_RATE)
+    up = WHISPER_SAMPLE_RATE // g
+    down = sample_rate // g
+    return resample_poly(pcm, up, down).astype(np.float32)
 
 
 class MLXWhisperBackend:
@@ -25,6 +43,7 @@ class MLXWhisperBackend:
     async def transcribe(self, audio: bytes, sample_rate: int) -> str:
         # PCM int16 → float32 in [-1, 1]
         pcm = np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0
+        pcm = _resample_to_16k(pcm, sample_rate)
         async with self._lock:
             result: dict = mlx_whisper.transcribe(  # type: ignore[assignment]
                 pcm,

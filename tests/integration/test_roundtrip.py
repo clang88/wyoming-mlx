@@ -12,7 +12,7 @@ async def test_tts_stt_roundtrip():
     pytest.importorskip("mlx_whisper")
     pytest.importorskip("kokoro")
 
-    tts = KokoroBackend(voice="af_heart")
+    tts = KokoroBackend(model_id="hexgrad/Kokoro-82M", voice="af_heart")
     stt = MLXWhisperBackend()
 
     text = "The quick brown fox jumps over the lazy dog"

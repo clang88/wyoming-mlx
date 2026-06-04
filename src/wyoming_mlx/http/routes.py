@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hmac
 import io
-import wave
+import struct
 from collections.abc import AsyncIterator
 
 import numpy as np
@@ -71,14 +71,36 @@ def _decode_audio_to_pcm16_mono(raw: bytes) -> tuple[bytes, int]:
 
 
 def _wav_header(sample_rate: int) -> bytes:
-    """A WAV header for an unknown-length stream (data size = 0xFFFFFFFF)."""
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sample_rate)
-        w.writeframes(b"")
-    return buf.getvalue()
+    """Streaming WAV header for mono int16 PCM.
+
+    Declares RIFF and data sizes as 0xFFFFFFFF — libsndfile and most other
+    readers treat this as "unknown length" and use the file/stream's actual
+    byte length instead. Using ``wave.open`` here is wrong: it writes a
+    header with data size = 0 and the trailing PCM is ignored.
+    """
+    nchannels = 1
+    sampwidth = 2
+    byte_rate = sample_rate * nchannels * sampwidth
+    block_align = nchannels * sampwidth
+    bits_per_sample = sampwidth * 8
+    return (
+        b"RIFF"
+        + struct.pack("<I", 0xFFFFFFFF)
+        + b"WAVE"
+        + b"fmt "
+        + struct.pack("<I", 16)
+        + struct.pack(
+            "<HHIIHH",
+            1,
+            nchannels,
+            sample_rate,
+            byte_rate,
+            block_align,
+            bits_per_sample,
+        )
+        + b"data"
+        + struct.pack("<I", 0xFFFFFFFF)
+    )
 
 
 def build_router(

@@ -10,6 +10,7 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "numpy",
+    "scipy",
     "soundfile",
     "python-multipart>=0.0.29",
     "mlx>=0.31.2",

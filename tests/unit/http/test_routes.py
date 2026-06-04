@@ -2,6 +2,7 @@ import io
 import wave
 
 import pytest
+import soundfile as sf
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
@@ -106,6 +107,25 @@ async def test_speech_returns_wav(client):
     assert r.headers["content-type"].startswith("audio/wav")
     assert r.content[:4] == b"RIFF"
     assert b"\x01\x02\x03\x04" in r.content
+
+
+@pytest.mark.asyncio
+async def test_speech_wav_is_parseable_and_roundtrips_to_transcribe(client):
+    """The WAV streamed by /v1/audio/speech must declare a data size that
+    covers the actual PCM payload, so a downstream STT consumer (or any
+    libsndfile-based reader) gets the audio back, not zero frames."""
+    r = await client.post(
+        "/v1/audio/speech",
+        headers={"Authorization": "Bearer sekret"},
+        json={"input": "hello", "voice": "alice"},
+    )
+    assert r.status_code == 200
+    audio = r.content
+
+    # FakeTTSBackend emits b"\x01\x02" + b"\x03\x04" = 2 int16 samples
+    data, rate = sf.read(io.BytesIO(audio), dtype="int16", always_2d=True)
+    assert rate == 24000
+    assert data.shape[0] == 2, f"expected 2 frames decoded, got {data.shape[0]}"
 
 
 @pytest.mark.asyncio
