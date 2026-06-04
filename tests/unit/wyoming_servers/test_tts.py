@@ -27,7 +27,7 @@ async def test_tts_handler_emits_audio_envelope():
     capture = _CaptureWriter()
     handler = TtsEventHandler(
         reader=MagicMock(spec=asyncio.StreamReader),
-        writer=AsyncMock(),
+        writer=MagicMock(spec=asyncio.StreamWriter),
         backend=backend,
         default_voice="v1",
         info=Info(),
@@ -48,7 +48,7 @@ async def test_tts_handler_uses_default_voice_when_none_supplied():
     backend = FakeTTSBackend(chunks=[b"\x00"], voices=["alice", "bob"], sample_rate=24000)
     handler = TtsEventHandler(
         reader=MagicMock(spec=asyncio.StreamReader),
-        writer=AsyncMock(),
+        writer=MagicMock(spec=asyncio.StreamWriter),
         backend=backend,
         default_voice="alice",
         info=Info(),
@@ -65,7 +65,7 @@ async def test_tts_handler_responds_to_describe():
     capture = _CaptureWriter()
     handler = TtsEventHandler(
         reader=MagicMock(spec=asyncio.StreamReader),
-        writer=AsyncMock(),
+        writer=MagicMock(spec=asyncio.StreamWriter),
         backend=backend,
         default_voice="v1",
         info=Info(),
@@ -78,3 +78,39 @@ async def test_tts_handler_responds_to_describe():
     assert len(info_events) == 1
     result_info = Info.from_event(info_events[0])
     assert isinstance(result_info, Info)
+
+
+@pytest.mark.asyncio
+async def test_tts_handler_uses_requested_voice():
+    from wyoming.tts import SynthesizeVoice
+
+    backend = FakeTTSBackend(chunks=[b"\x00"], voices=["alice", "bob"], sample_rate=24000)
+    handler = TtsEventHandler(
+        reader=MagicMock(spec=asyncio.StreamReader),
+        writer=MagicMock(spec=asyncio.StreamWriter),
+        backend=backend,
+        default_voice="alice",
+        info=Info(),
+    )
+    await handler.handle_event(Synthesize(text="hello", voice=SynthesizeVoice(name="bob")).event())
+    assert backend.calls == [("hello", "bob")]
+
+
+@pytest.mark.asyncio
+async def test_tts_handler_ignores_empty_text():
+    backend = FakeTTSBackend(chunks=[b"\x00"], voices=["v1"], sample_rate=24000)
+    capture = _CaptureWriter()
+    handler = TtsEventHandler(
+        reader=MagicMock(spec=asyncio.StreamReader),
+        writer=MagicMock(spec=asyncio.StreamWriter),
+        backend=backend,
+        default_voice="v1",
+        info=Info(),
+    )
+    handler.write_event = AsyncMock(side_effect=lambda e: capture.capture(e))
+
+    result = await handler.handle_event(Synthesize(text="", voice=None).event())
+
+    assert result is True
+    assert capture.events == []
+    assert backend.calls == []

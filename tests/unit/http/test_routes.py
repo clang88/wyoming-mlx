@@ -11,6 +11,16 @@ from wyoming_mlx.config import ModelsConfig
 from wyoming_mlx.http.app import create_app
 
 
+def _stereo_wav_bytes(sample_rate: int = 16000, n_frames: int = 800) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(sample_rate)
+        w.writeframes(b"\x00\x00" * 2 * n_frames)
+    return buf.getvalue()
+
+
 def _wav_bytes(pcm: bytes, sample_rate: int = 16000) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
@@ -50,9 +60,7 @@ async def test_models_route_is_public(client):
     assert r.status_code == 200
     body = r.json()
     assert any(m["id"] == "alice" for m in body["data"])
-    assert any(
-        m["id"] == "mlx-community/distil-whisper-large-v3" for m in body["data"]
-    )
+    assert any(m["id"] == "mlx-community/distil-whisper-large-v3" for m in body["data"])
 
 
 @pytest.mark.asyncio
@@ -169,3 +177,24 @@ async def test_speech_rejects_unknown_voice(client):
     )
     assert r.status_code == 400
     assert "unknown voice" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_transcriptions_rejects_wrong_key(client):
+    r = await client.post(
+        "/v1/audio/transcriptions",
+        headers={"Authorization": "Bearer wrongkey"},
+        files={"file": ("a.wav", _wav_bytes(b"\x00" * 1600), "audio/wav")},
+    )
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_transcriptions_accepts_stereo_audio(client):
+    r = await client.post(
+        "/v1/audio/transcriptions",
+        headers={"Authorization": "Bearer sekret"},
+        files={"file": ("stereo.wav", _stereo_wav_bytes(), "audio/wav")},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"text": "hi there"}

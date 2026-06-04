@@ -6,8 +6,15 @@ import asyncio
 import logging
 from math import gcd
 
-import mlx_whisper
 import numpy as np
+
+try:
+    import mlx_whisper as _mlx_whisper
+
+    _MLX_AVAILABLE = True
+except ImportError:
+    _mlx_whisper = None  # type: ignore[assignment]
+    _MLX_AVAILABLE = False
 from scipy.signal import resample_poly
 
 log = logging.getLogger(__name__)
@@ -44,8 +51,9 @@ class MLXWhisperBackend:
         # PCM int16 → float32 in [-1, 1]
         pcm = np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0
         pcm = _resample_to_16k(pcm, sample_rate)
+        assert _MLX_AVAILABLE and _mlx_whisper is not None, "mlx_whisper required"
         async with self._lock:
-            result: dict = mlx_whisper.transcribe(  # type: ignore[assignment]
+            result: dict = _mlx_whisper.transcribe(  # type: ignore[assignment]
                 pcm,
                 path_or_hf_repo=self._model_id,
                 fp16=True,

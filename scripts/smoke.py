@@ -23,9 +23,7 @@ async def check_stt(host: str, port: int) -> None:
     pcm = b"\x00\x00" * 16000  # 1 s of silence at 16 kHz
     async with AsyncTcpClient(host, port) as client:
         await client.write_event(AudioStart(rate=16000, width=2, channels=1).event())
-        await client.write_event(
-            AudioChunk(rate=16000, width=2, channels=1, audio=pcm).event()
-        )
+        await client.write_event(AudioChunk(rate=16000, width=2, channels=1, audio=pcm).event())
         await client.write_event(AudioStop().event())
         event = await client.read_event()
         print(f"[STT] got: {event.type if event else 'no response'}")

@@ -6,6 +6,7 @@ from wyoming_mlx.backends.mlx_stt import MLXWhisperBackend
 from wyoming_mlx.backends.mlx_tts import KokoroBackend
 
 
+@pytest.mark.integration
 async def test_tts_stt_roundtrip():
     """Kokoro synthesises → Whisper transcribes → transcript shares words with input."""
     # Skip unless --integration flag is passed

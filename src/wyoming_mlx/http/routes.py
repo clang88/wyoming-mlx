@@ -33,12 +33,8 @@ def _require_api_key(api_keys: set[str]):
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
             )
         token = auth[7:].strip()
-        if not api_keys or not any(
-            hmac.compare_digest(token, key) for key in api_keys
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid api key"
-            )
+        if not api_keys or not any(hmac.compare_digest(token, key) for key in api_keys):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid api key")
 
     return dep
 
@@ -115,13 +111,8 @@ def build_router(
 
     @router.get("/v1/models")
     async def list_models() -> dict:
-        data = [
-            {"id": v, "object": "model", "owned_by": "wyoming-mlx"}
-            for v in tts.voices
-        ]
-        data.append(
-            {"id": models.whisper, "object": "model", "owned_by": "wyoming-mlx"}
-        )
+        data = [{"id": v, "object": "model", "owned_by": "wyoming-mlx"} for v in tts.voices]
+        data.append({"id": models.whisper, "object": "model", "owned_by": "wyoming-mlx"})
         return {"object": "list", "data": data}
 
     @router.post("/v1/audio/transcriptions", dependencies=[auth])

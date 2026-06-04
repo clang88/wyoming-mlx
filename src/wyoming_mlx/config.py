@@ -17,7 +17,7 @@ def _env_overrides(prefix: str, delimiter: str = "__") -> dict:
     for key, value in os.environ.items():
         if not key.startswith(prefix):
             continue
-        remainder = key[len(prefix):]
+        remainder = key[len(prefix) :]
         if not remainder:
             continue
         parts = remainder.strip(delimiter).split(delimiter)

@@ -18,9 +18,7 @@ async def test_run_servers_starts_and_stops():
 
     from wyoming_mlx.__main__ import run_servers
 
-    task = asyncio.create_task(
-        run_servers(cfg=cfg, stt=stt, tts=tts, api_keys=set())
-    )
+    task = asyncio.create_task(run_servers(cfg=cfg, stt=stt, tts=tts, api_keys=set()))
     # Give the servers a moment to come up.
     await asyncio.sleep(0.3)
     task.cancel()

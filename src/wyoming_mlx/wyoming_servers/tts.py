@@ -6,8 +6,8 @@ import logging
 from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.event import Event
 from wyoming.info import Describe, Info
-from wyoming.tts import Synthesize
 from wyoming.server import AsyncEventHandler
+from wyoming.tts import Synthesize
 
 from wyoming_mlx.backends.base import TTSBackend
 

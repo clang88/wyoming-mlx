@@ -13,8 +13,8 @@ dependencies = [
     "scipy",
     "soundfile",
     "python-multipart>=0.0.29",
-    "mlx>=0.31.2",
-    "mlx-whisper>=0.4.3",
+    "mlx>=0.31.2; sys_platform == 'darwin'",
+    "mlx-whisper>=0.4.3; sys_platform == 'darwin'",
     "kokoro>=0.9.4",
     "torch",
 ]
@@ -35,6 +35,9 @@ markers = [
     "integration: marks tests requiring real MLX models (auto-skipped, use --integration to run)",
 ]
 testpaths = ["tests"]
+filterwarnings = [
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.ruff]
 line-length = 100
@@ -57,5 +60,6 @@ dev = [
     "pyright>=1.1.409",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=6.0.0",
     "ruff>=0.15.14",
 ]

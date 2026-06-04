@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import atexit
+import contextlib
 import logging
 import multiprocessing
 import os
@@ -107,6 +108,7 @@ def _ensure_models_cached(kokoro_model_id: str, whisper_model_id: str) -> None:
     except Exception:
         log.warning("Model cache check failed — models will download lazily.")
 
+
 _PROJECT_URL = "https://github.com/rnorth/wyoming-mlx"
 
 
@@ -171,12 +173,8 @@ async def run_servers(
     stt_info = _build_stt_info(cfg.models.whisper)
     tts_info = _build_tts_info(tts.voices)
 
-    stt_server = AsyncServer.from_uri(
-        f"tcp://{cfg.wyoming.stt_host}:{cfg.wyoming.stt_port}"
-    )
-    tts_server = AsyncServer.from_uri(
-        f"tcp://{cfg.wyoming.tts_host}:{cfg.wyoming.tts_port}"
-    )
+    stt_server = AsyncServer.from_uri(f"tcp://{cfg.wyoming.stt_host}:{cfg.wyoming.stt_port}")
+    tts_server = AsyncServer.from_uri(f"tcp://{cfg.wyoming.tts_host}:{cfg.wyoming.tts_port}")
 
     app = create_app(
         stt=stt,
@@ -192,15 +190,23 @@ async def run_servers(
     )
     http_server = uvicorn.Server(http_config)
 
-    log.info("Starting wyoming-mlx (STT=%s:%s TTS=%s:%s HTTP=%s:%s)",
-             cfg.wyoming.stt_host, cfg.wyoming.stt_port,
-             cfg.wyoming.tts_host, cfg.wyoming.tts_port,
-             cfg.http.host, cfg.http.port)
+    log.info(
+        "Starting wyoming-mlx (STT=%s:%s TTS=%s:%s HTTP=%s:%s)",
+        cfg.wyoming.stt_host,
+        cfg.wyoming.stt_port,
+        cfg.wyoming.tts_host,
+        cfg.wyoming.tts_port,
+        cfg.http.host,
+        cfg.http.port,
+    )
 
     stt_server_task = asyncio.create_task(
         stt_server.run(
             lambda reader, writer: SttEventHandler(
-                reader, writer, backend=stt, info=stt_info,
+                reader,
+                writer,
+                backend=stt,
+                info=stt_info,
                 max_audio_bytes=cfg.wyoming.stt_max_audio_bytes,
             ),
         ),
@@ -209,7 +215,11 @@ async def run_servers(
     tts_server_task = asyncio.create_task(
         tts_server.run(
             lambda reader, writer: TtsEventHandler(
-                reader, writer, backend=tts, default_voice=cfg.models.kokoro_default_voice, info=tts_info
+                reader,
+                writer,
+                backend=tts,
+                default_voice=cfg.models.kokoro_default_voice,
+                info=tts_info,
             ),
         ),
         name="tts-server",
@@ -254,7 +264,7 @@ def _apply_cli_overrides(cfg: Config, args: argparse.Namespace) -> None:
         ("models.kokoro_default_voice", "kokoro_default_voice", args.kokoro_default_voice),
         ("logging.level", "log_level", args.log_level),
     ]
-    for dotpath, attr, value in overrides:
+    for dotpath, _attr, value in overrides:
         if value is not None:
             obj = cfg
             parts = dotpath.split(".")
@@ -297,10 +307,8 @@ def main(argv: list[str] | None = None) -> None:
     # Suppress misaki's leaked semaphore warning at shutdown (multiprocessing
     # resource tracker retains a semaphore that is never closed).
     def _cleanup_mp() -> None:
-        try:
+        with contextlib.suppress(Exception):
             multiprocessing.resource_tracker._resource_tracker.shutdown()  # type: ignore[attr-defined]
-        except Exception:
-            pass
 
     atexit.register(_cleanup_mp)
 

@@ -12,8 +12,7 @@ class STTBackend(Protocol):
     tasks. A real implementation may serialise GPU work internally.
     """
 
-    async def transcribe(self, audio: bytes, sample_rate: int) -> str:
-        ...
+    async def transcribe(self, audio: bytes, sample_rate: int) -> str: ...
 
 
 @runtime_checkable
@@ -29,5 +28,4 @@ class TTSBackend(Protocol):
     voices: list[str]
     sample_rate: int
 
-    def synthesize(self, text: str, voice: str) -> AsyncIterator[bytes]:
-        ...
+    def synthesize(self, text: str, voice: str) -> AsyncIterator[bytes]: ...
