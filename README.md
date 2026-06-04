@@ -71,14 +71,3 @@ Pass `--config /path/to/config.toml` or set env vars with the
 `WYOMING_MLX_` prefix and `__` for nesting (e.g.
 `WYOMING_MLX_HTTP__PORT=10401`). See `src/wyoming_mlx/config.py` for the
 full schema.
-
-## Deployment to the the host
-
-See `deploy/README.md` (created in Task 11) for the LaunchDaemon plist and
-install steps.
-
-## Smoke test
-
-```bash
-uv run python scripts/smoke.py --host <host> --api-key "$KEY"
-```
