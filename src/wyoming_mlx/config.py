@@ -76,7 +76,7 @@ def load_config(config_path: Path | None) -> Config:
     toml_dict: dict = {}
     if config_path is not None:
         try:
-            with open(config_path, "rb") as f:
+            with config_path.open("rb") as f:
                 toml_dict = tomllib.load(f)
         except tomllib.TOMLDecodeError as exc:
             raise ValueError(f"malformed TOML in {config_path}: {exc}") from exc

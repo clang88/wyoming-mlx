@@ -47,5 +47,5 @@ def test_env_overrides_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def test_malformed_toml_raises(tmp_path: Path):
     cfg_file = tmp_path / "config.toml"
     cfg_file.write_text("this is not = valid = toml = [")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="malformed TOML"):
         load_config(config_path=cfg_file)

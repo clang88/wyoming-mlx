@@ -54,12 +54,23 @@ filterwarnings = [
     "error::pytest.PytestUnraisableExceptionWarning",
 ]
 
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+typeCheckingMode = "standard"
+reportMissingParameterType = "error"
+reportPrivateUsage = "error"
+
+[[tool.pyright.executionEnvironments]]
+# Tests may exercise private helpers directly.
+root = "tests"
+reportPrivateUsage = "none"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "W", "A", "C4", "N", "PT", "PTH"]
 
 [tool.coverage.run]
 source = ["src/wyoming_mlx"]

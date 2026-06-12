@@ -1,9 +1,10 @@
 import io
 import wave
+from collections.abc import AsyncIterator
 
 import pytest
 import soundfile as sf
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from wyoming_mlx.backends.fake import FakeSTTBackend, FakeTTSBackend
@@ -32,7 +33,7 @@ def _wav_bytes(pcm: bytes, sample_rate: int = 16000) -> bytes:
 
 
 @pytest.fixture
-def app():
+def app() -> FastAPI:
     stt = FakeSTTBackend(transcript="hi there")
     tts = FakeTTSBackend(
         chunks=[b"\x01\x02", b"\x03\x04"],
@@ -48,14 +49,14 @@ def app():
 
 
 @pytest.fixture
-async def client(app):
+async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
 
 @pytest.mark.asyncio
-async def test_models_route_is_public(client):
+async def test_models_route_is_public(client: AsyncClient):
     r = await client.get("/v1/models")
     assert r.status_code == 200
     body = r.json()
@@ -64,7 +65,7 @@ async def test_models_route_is_public(client):
 
 
 @pytest.mark.asyncio
-async def test_transcriptions_requires_auth(client):
+async def test_transcriptions_requires_auth(client: AsyncClient):
     r = await client.post(
         "/v1/audio/transcriptions",
         files={
@@ -79,7 +80,7 @@ async def test_transcriptions_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_transcriptions_with_auth(client):
+async def test_transcriptions_with_auth(client: AsyncClient):
     r = await client.post(
         "/v1/audio/transcriptions",
         headers={"Authorization": "Bearer sekret"},
@@ -96,7 +97,7 @@ async def test_transcriptions_with_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_speech_requires_auth(client):
+async def test_speech_requires_auth(client: AsyncClient):
     r = await client.post(
         "/v1/audio/speech",
         json={"input": "hello", "voice": "alice"},
@@ -105,7 +106,7 @@ async def test_speech_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_speech_returns_wav(client):
+async def test_speech_returns_wav(client: AsyncClient):
     r = await client.post(
         "/v1/audio/speech",
         headers={"Authorization": "Bearer sekret"},
@@ -118,7 +119,7 @@ async def test_speech_returns_wav(client):
 
 
 @pytest.mark.asyncio
-async def test_speech_wav_is_parseable_and_roundtrips_to_transcribe(client):
+async def test_speech_wav_is_parseable_and_roundtrips_to_transcribe(client: AsyncClient):
     """The WAV streamed by /v1/audio/speech must declare a data size that
     covers the actual PCM payload, so a downstream STT consumer (or any
     libsndfile-based reader) gets the audio back, not zero frames."""
@@ -137,7 +138,7 @@ async def test_speech_wav_is_parseable_and_roundtrips_to_transcribe(client):
 
 
 @pytest.mark.asyncio
-async def test_speech_rejects_unsupported_format(client):
+async def test_speech_rejects_unsupported_format(client: AsyncClient):
     r = await client.post(
         "/v1/audio/speech",
         headers={"Authorization": "Bearer sekret"},
@@ -147,7 +148,7 @@ async def test_speech_rejects_unsupported_format(client):
 
 
 @pytest.mark.asyncio
-async def test_transcriptions_rejects_large_file(client):
+async def test_transcriptions_rejects_large_file(client: AsyncClient):
     large_wav = _wav_bytes(b"\x00" * 200_000_000)
     r = await client.post(
         "/v1/audio/transcriptions",
@@ -169,7 +170,7 @@ async def test_transcriptions_rejects_unknown_magic():
 
 
 @pytest.mark.asyncio
-async def test_speech_rejects_unknown_voice(client):
+async def test_speech_rejects_unknown_voice(client: AsyncClient):
     r = await client.post(
         "/v1/audio/speech",
         headers={"Authorization": "Bearer sekret"},
@@ -180,7 +181,7 @@ async def test_speech_rejects_unknown_voice(client):
 
 
 @pytest.mark.asyncio
-async def test_transcriptions_rejects_wrong_key(client):
+async def test_transcriptions_rejects_wrong_key(client: AsyncClient):
     r = await client.post(
         "/v1/audio/transcriptions",
         headers={"Authorization": "Bearer wrongkey"},
@@ -190,7 +191,7 @@ async def test_transcriptions_rejects_wrong_key(client):
 
 
 @pytest.mark.asyncio
-async def test_transcriptions_accepts_stereo_audio(client):
+async def test_transcriptions_accepts_stereo_audio(client: AsyncClient):
     r = await client.post(
         "/v1/audio/transcriptions",
         headers={"Authorization": "Bearer sekret"},

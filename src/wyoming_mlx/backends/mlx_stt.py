@@ -51,7 +51,8 @@ class MLXWhisperBackend:
         # PCM int16 → float32 in [-1, 1]
         pcm = np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0
         pcm = _resample_to_16k(pcm, sample_rate)
-        assert _MLX_AVAILABLE and _mlx_whisper is not None, "mlx_whisper required"
+        assert _MLX_AVAILABLE, "mlx_whisper required"
+        assert _mlx_whisper is not None
         async with self._lock:
             result: dict = _mlx_whisper.transcribe(  # type: ignore[assignment]
                 pcm,
