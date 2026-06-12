@@ -3,6 +3,12 @@
 Apple-Silicon-native TTS (Kokoro) and STT (distil-whisper) for Home Assistant
 and OpenAI-compatible clients.
 
+Speech-to-text runs on [MLX](https://github.com/ml-explore/mlx) via
+`mlx-whisper`; text-to-speech runs Kokoro on Metal via PyTorch. The real
+backends therefore require an Apple Silicon Mac. Everything else (config,
+HTTP API, Wyoming protocol handling, fake backends, tests) is portable, and
+CI runs on Linux against the fake backends.
+
 ## Quick start (dev)
 
 ```bash
@@ -14,7 +20,7 @@ uv run pytest
 ## Run locally (fake backends)
 
 ```bash
-uv run python _dev_run.py
+uv run python scripts/dev_run.py
 ```
 
 ## Run locally (real MLX backends)
@@ -29,6 +35,18 @@ By default it loads:
 - HTTP on port 10400 with API-key auth
 
 Models download on first use to the Hugging Face cache.
+
+### API keys
+
+HTTP endpoints require a bearer token. Keys are read at startup from
+`~/.config/wyoming-mlx/apikeys` (override with `--http-api-keys-file`),
+one key per line, `#` comments allowed. The file should be mode `0600`.
+If the file is missing or empty, all HTTP requests are rejected with 401.
+
+```bash
+mkdir -p ~/.config/wyoming-mlx
+(umask 077; openssl rand -hex 32 > ~/.config/wyoming-mlx/apikeys)
+```
 
 ## HTTP API
 
@@ -71,3 +89,7 @@ Pass `--config /path/to/config.toml` or set env vars with the
 `WYOMING_MLX_` prefix and `__` for nesting (e.g.
 `WYOMING_MLX_HTTP__PORT=10401`). See `src/wyoming_mlx/config.py` for the
 full schema.
+
+## License
+
+[Apache-2.0](LICENSE)
