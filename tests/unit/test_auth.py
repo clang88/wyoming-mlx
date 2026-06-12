@@ -5,9 +5,11 @@ import pytest
 from wyoming_mlx.auth import load_api_keys
 
 
-def test_returns_empty_set_when_file_missing(tmp_path: Path):
-    keys = load_api_keys(tmp_path / "nope")
+def test_returns_empty_set_when_file_missing(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    with caplog.at_level("WARNING"):
+        keys = load_api_keys(tmp_path / "nope")
     assert keys == set()
+    assert any("does not exist" in rec.message for rec in caplog.records)
 
 
 def test_parses_multiple_keys(tmp_path: Path):

@@ -32,11 +32,17 @@ uv sync
 uv run pytest
 ```
 
+On Linux, use `uv sync --torch-backend cpu` (no CUDA/Metal needed for the
+fake backends). Integration tests against real models are skipped by
+default; run them with `uv run pytest --integration` (Apple Silicon only).
+
 ## Run locally (fake backends)
 
 ```bash
 uv run python scripts/dev_run.py
 ```
+
+The dev server uses the API key `dev`.
 
 ## Run locally (real MLX backends)
 
@@ -57,6 +63,10 @@ HTTP endpoints require a bearer token. Keys are read at startup from
 `~/.config/wyoming-mlx/apikeys` (override with `--http-api-keys-file`),
 one key per line, `#` comments allowed. The file should be mode `0600`.
 If the file is missing or empty, all HTTP requests are rejected with 401.
+
+Note that the HTTP API listens on all interfaces by default (set
+`WYOMING_MLX_HTTP__HOST=127.0.0.1` to restrict it), and `GET /v1/models`
+is unauthenticated, matching OpenAI API behaviour.
 
 ```bash
 mkdir -p ~/.config/wyoming-mlx
