@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v8
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Publish to PyPI (trusted publishing)
+        run: uv publish --trusted-publishing always
+
+  homebrew:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out tap
+        uses: actions/checkout@v5
+        with:
+          repository: rnorth/homebrew-tap
+          ssh-key: ${{ secrets.TAP_DEPLOY_KEY }}
+
+      - name: Compute release tarball sha256
+        id: tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          curl -fsL -H "Authorization: token $GH_TOKEN" \
+            "https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz" \
+            -o "$RUNNER_TEMP/release.tar.gz"
+          echo "sha=$(sha256sum "$RUNNER_TEMP/release.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          SHA: ${{ steps.tarball.outputs.sha }}
+        run: |
+          sed -i -E "s|/archive/refs/tags/v[0-9][^\"]*\.tar\.gz|/archive/refs/tags/${TAG}.tar.gz|" Formula/wyoming-mlx.rb
+          sed -i -E "s|sha256 \"[0-9a-f]{64}\"|sha256 \"${SHA}\"|" Formula/wyoming-mlx.rb
+          git diff
+
+      - name: Commit and push
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if git diff --quiet; then
+            echo "Formula already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "wyoming-mlx ${TAG}"
+          git push
