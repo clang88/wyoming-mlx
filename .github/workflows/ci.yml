@@ -14,8 +14,8 @@ jobs:
 
       - uses: jdx/mise-action@v2
 
-      - name: Install dependencies (CPU torch for Linux)
-        run: uv sync --torch-backend cpu
+      - name: Install dependencies
+        run: uv sync
 
       - name: Lint
         run: uv run ruff check .

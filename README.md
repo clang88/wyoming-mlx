@@ -32,8 +32,8 @@ uv sync
 uv run pytest
 ```
 
-On Linux, use `uv sync --torch-backend cpu` (no CUDA/Metal needed for the
-fake backends). Integration tests against real models are skipped by
+Works on Linux too: CPU-only torch is selected automatically (the fake
+backends need no GPU). Integration tests against real models are skipped by
 default; run them with `uv run pytest --integration` (Apple Silicon only).
 
 ## Run locally (fake backends)
