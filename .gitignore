@@ -10,3 +10,4 @@ build/
 models/
 notes.md
 _dev_run.py
+.coverage
