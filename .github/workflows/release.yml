@@ -3,9 +3,19 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+      publish_pypi:
+        description: "Also publish to PyPI"
+        type: boolean
+        default: false
 
 jobs:
   pypi:
+    if: github.event_name == 'release' || inputs.publish_pypi
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -13,8 +23,10 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
 
       - name: Build sdist and wheel
         run: uv build
@@ -37,16 +49,25 @@ jobs:
         id: tarball
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          curl -fsL -H "Authorization: token $GH_TOKEN" \
-            "https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz" \
-            -o "$RUNNER_TEMP/release.tar.gz"
-          echo "sha=$(sha256sum "$RUNNER_TEMP/release.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          url="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+          out="$RUNNER_TEMP/release.tar.gz"
+          # Unauthenticated first (public repo), then token auth (private repo).
+          code=$(curl -sL -o "$out" -w "%{http_code}" "$url")
+          if [ "$code" != "200" ]; then
+            echo "Unauthenticated fetch: HTTP $code; retrying with token"
+            code=$(curl -sL -H "Authorization: Bearer $GH_TOKEN" -o "$out" -w "%{http_code}" "$url")
+          fi
+          if [ "$code" != "200" ]; then
+            echo "::error::Could not fetch $url (HTTP $code)"
+            exit 1
+          fi
+          echo "sha=$(sha256sum "$out" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Update formula
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
           SHA: ${{ steps.tarball.outputs.sha }}
         run: |
           sed -i -E "s|/archive/refs/tags/v[0-9][^\"]*\.tar\.gz|/archive/refs/tags/${TAG}.tar.gz|" Formula/wyoming-mlx.rb
@@ -55,7 +76,7 @@ jobs:
 
       - name: Commit and push
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           if git diff --quiet; then
             echo "Formula already up to date."
