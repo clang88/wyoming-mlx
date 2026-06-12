@@ -14,7 +14,7 @@ def load_api_keys(path: Path | str) -> set[str]:
     run with the HTTP API effectively closed).  Emits a WARNING if the file is
     readable by group/other.
     """
-    p = Path(path)
+    p = Path(path).expanduser()
     if not p.exists():
         log.warning("API keys file %s does not exist; HTTP endpoints will reject all requests", p)
         return set()
