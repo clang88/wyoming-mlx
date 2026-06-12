@@ -2,6 +2,17 @@
 name = "wyoming-mlx"
 version = "0.1.0"
 description = "Apple-Silicon-native TTS and STT for Home Assistant and OpenAI-compatible clients"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Richard North", email = "rich.north@gmail.com" }]
+keywords = ["wyoming", "home-assistant", "mlx", "tts", "stt", "kokoro", "whisper", "apple-silicon"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
 requires-python = ">=3.12"
 dependencies = [
     "wyoming",
@@ -18,6 +29,10 @@ dependencies = [
     "kokoro>=0.9.4",
     "torch",
 ]
+
+[project.urls]
+Homepage = "https://github.com/rnorth/wyoming-mlx"
+Issues = "https://github.com/rnorth/wyoming-mlx/issues"
 
 [project.scripts]
 wyoming-mlx = "wyoming_mlx.__main__:main"
