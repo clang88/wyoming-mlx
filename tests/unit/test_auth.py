@@ -37,3 +37,12 @@ def test_empty_file_returns_empty_set(tmp_path: Path):
     f = tmp_path / "keys"
     f.write_text("")
     assert load_api_keys(f) == set()
+
+
+def test_warns_when_file_has_no_keys(tmp_path: Path, caplog):
+    f = tmp_path / "keys"
+    f.write_text("# comments only, no keys\n\n")
+    os.chmod(f, 0o600)
+    with caplog.at_level("WARNING"):
+        assert load_api_keys(f) == set()
+    assert any("no keys" in rec.message.lower() for rec in caplog.records)

@@ -33,4 +33,8 @@ def load_api_keys(path: Path | str) -> set[str]:
         if not stripped or stripped.startswith("#"):
             continue
         keys.add(stripped)
+    if not keys:
+        log.warning(
+            "API keys file %s contains no keys; HTTP endpoints will reject all requests", p
+        )
     return keys
