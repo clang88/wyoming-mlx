@@ -91,7 +91,7 @@ def _ensure_models_cached(kokoro_model_id: str, whisper_model_id: str) -> None:
             # mlx-whisper resolves the model path via huggingface_hub.
             # We can't call hf_hub_download directly for mlx-whisper models,
             # so we do a quick probe import to trigger the download.
-            import mlx_whisper  # noqa: F401
+            import mlx_whisper  # noqa: F401  # pyright: ignore[reportMissingImports]
 
             # Trigger a dummy transcribe to populate the cache.
             # Actually, we can't do that without audio. Just note it.

@@ -9,7 +9,7 @@ from math import gcd
 import numpy as np
 
 try:
-    import mlx_whisper as _mlx_whisper
+    import mlx_whisper as _mlx_whisper  # pyright: ignore[reportMissingImports]
 
     _MLX_AVAILABLE = True
 except ImportError:
