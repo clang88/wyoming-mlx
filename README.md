@@ -9,6 +9,21 @@ backends therefore require an Apple Silicon Mac. Everything else (config,
 HTTP API, Wyoming protocol handling, fake backends, tests) is portable, and
 CI runs on Linux against the fake backends.
 
+## Install (Homebrew)
+
+```bash
+brew tap rnorth/tap
+brew install wyoming-mlx
+```
+
+Run it in the foreground with `wyoming-mlx`, or as a launchd service:
+
+```bash
+brew services start wyoming-mlx
+```
+
+Logs go to `$(brew --prefix)/var/log/wyoming-mlx.log`. Apple Silicon only.
+
 ## Quick start (dev)
 
 ```bash
