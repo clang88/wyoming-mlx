@@ -3,6 +3,26 @@
 Apple-Silicon-native TTS (Kokoro) and STT (distil-whisper) for Home Assistant
 and OpenAI-compatible clients.
 
+## Why?
+
+If you have a Mac on your network, it can be your voice server. wyoming-mlx
+turns it into a fast, fully local speech-to-text and text-to-speech service:
+
+- **Private by construction.** Audio never leaves your network — no cloud
+  speech APIs, no per-request pricing, nothing to subscribe to. Models run
+  entirely on your machine.
+- **Uses hardware you already own.** Apple Silicon's GPU and unified memory
+  run Whisper and Kokoro comfortably alongside whatever else the Mac is
+  doing — no dedicated GPU server, no idle power draw of a CUDA box.
+- **One service, two ecosystems.** Home Assistant talks to it natively over
+  the [Wyoming protocol](https://github.com/rhasspy/wyoming) (drop-in
+  replacement for `wyoming-faster-whisper`/`wyoming-piper` satellites), while
+  anything that speaks the OpenAI audio API — scripts, editors, chat UIs —
+  can use the same instance via `/v1/audio/transcriptions` and
+  `/v1/audio/speech`.
+- **Set-and-forget.** Install with Homebrew, run as a launchd service via
+  `brew services`, and models are fetched once into the Hugging Face cache.
+
 Speech-to-text runs on [MLX](https://github.com/ml-explore/mlx) via
 `mlx-whisper`; text-to-speech runs Kokoro on Metal via PyTorch. The real
 backends therefore require an Apple Silicon Mac. Everything else (config,
