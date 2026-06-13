@@ -1,6 +1,6 @@
 # wyoming-mlx
 
-Apple-Silicon-native TTS (Kokoro) and STT (distil-whisper) for Home Assistant
+Apple-Silicon-native TTS (Kokoro) and streaming STT (Whisper via WhisperLiveKit) for Home Assistant
 and OpenAI-compatible clients.
 
 ## Why?
@@ -23,9 +23,10 @@ turns it into a fast, fully local speech-to-text and text-to-speech service:
 - **Set-and-forget.** Install with Homebrew, run as a launchd service via
   `brew services`, and models are fetched once into the Hugging Face cache.
 
-Speech-to-text runs on [MLX](https://github.com/ml-explore/mlx) via
-`mlx-whisper`; text-to-speech runs Kokoro on Metal via PyTorch. The real
-backends therefore require an Apple Silicon Mac. Everything else (config,
+Speech-to-text streams through [WhisperLiveKit](https://github.com/collabora/WhisperLiveKit)'s
+SimulStreaming (AlignAtt) policy on MLX, so partial transcripts arrive while
+you're still speaking; text-to-speech runs Kokoro on Metal via PyTorch. The
+real backends therefore require an Apple Silicon Mac. Everything else (config,
 HTTP API, Wyoming protocol handling, fake backends, tests) is portable, and
 CI runs on Linux against the fake backends.
 
@@ -43,6 +44,22 @@ brew services start wyoming-mlx
 ```
 
 Logs go to `$(brew --prefix)/var/log/wyoming-mlx.log`. Apple Silicon only.
+
+> [!WARNING]
+> **Upgraders:** the `models.whisper` config value (TOML `[models] whisper =
+> ...`, CLI `--whisper-model`, env `WYOMING_MLX_MODELS__WHISPER`) changed
+> meaning in this release. It used to be a Hugging Face repo ID (e.g.
+> `mlx-community/distil-whisper-large-v3`); it is now a WhisperLiveKit
+> model-size name: `tiny`, `base`, `small`, `medium`, `large-v3`, or
+> `large-v3-turbo` (default `large-v3-turbo`). An old repo-ID value (anything
+> containing `/`) is rejected at startup with a clear error. Update your
+> config, for example:
+>
+> ```toml
+> [models]
+> # before:  whisper = "mlx-community/distil-whisper-large-v3"
+> whisper = "large-v3-turbo"
+> ```
 
 ## Quick start (dev)
 
@@ -71,11 +88,13 @@ uv run wyoming-mlx
 ```
 
 By default it loads:
-- distil-whisper-large-v3 (MLX) on Wyoming port 10300 / HTTP `/v1/audio/transcriptions`
+- whisper-large-v3-turbo (MLX, streaming) on Wyoming port 10300 / HTTP `/v1/audio/transcriptions`
 - Kokoro-82M (MLX) on Wyoming port 10200 / HTTP `/v1/audio/speech`
 - HTTP on port 10400 with API-key auth
 
-Models download on first use to the Hugging Face cache.
+Models are stored in the Hugging Face cache. The STT model is loaded at
+startup (so a bad model name or download failure surfaces immediately); the
+Kokoro TTS model downloads on first synthesis.
 
 ### API keys
 
@@ -127,6 +146,9 @@ Settings → Integrations → Wyoming Protocol → Add:
 - TTS: `<host>:10200`
 
 No keys, no TLS (HA convention, trusted LAN).
+
+Streaming transcripts (live partial results) require Home Assistant 2025.7 or
+newer; older versions still receive the final transcript exactly as before.
 
 ## Configuration
 

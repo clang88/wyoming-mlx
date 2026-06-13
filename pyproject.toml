@@ -1,7 +1,7 @@
 [project]
 name = "wyoming-mlx"
 version = "0.1.0"
-description = "Apple-Silicon-native TTS and STT for Home Assistant and OpenAI-compatible clients"
+description = "Apple-Silicon-native TTS and streaming STT for Home Assistant and OpenAI-compatible clients"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -24,8 +24,8 @@ dependencies = [
     "scipy",
     "soundfile",
     "python-multipart>=0.0.29",
-    "mlx>=0.31.2; sys_platform == 'darwin'",
-    "mlx-whisper>=0.4.3; sys_platform == 'darwin'",
+    # mlx comes in transitively via whisperlivekit[mlx-whisper] → mlx-whisper.
+    "whisperlivekit[mlx-whisper]==0.2.22; sys_platform == 'darwin'",
     "kokoro>=0.9.4",
     "torch",
 ]
