@@ -108,16 +108,19 @@ _WHISPER_LANGUAGES = [
 ]
 
 
-def _build_stt_info(model_id: str) -> Info:
+def _build_stt_info(model_id: str, *, streaming: bool) -> Info:
+    description = (
+        "WhisperLiveKit streaming STT (MLX)" if streaming else "mlx-whisper batch STT (MLX)"
+    )
     return Info(
         asr=[
             AsrProgram(
                 name="wyoming-mlx-stt",
                 attribution=Attribution(name="wyoming-mlx", url=_PROJECT_URL),
                 installed=True,
-                description="WhisperLiveKit streaming STT (MLX)",
+                description=description,
                 version="0.1.0",
-                supports_transcript_streaming=True,
+                supports_transcript_streaming=streaming,
                 models=[
                     AsrModel(
                         name=model_id,
@@ -196,7 +199,7 @@ async def run_servers(
 ) -> None:
     """Start Wyoming STT, Wyoming TTS, and HTTP servers and run until cancelled."""
 
-    stt_info = _build_stt_info(cfg.models.whisper)
+    stt_info = _build_stt_info(cfg.models.whisper, streaming=cfg.models.stt_backend == "whisperlivekit")
     tts_info = _build_tts_info(tts.voices)
 
     stt_server = AsyncServer.from_uri(f"tcp://{cfg.wyoming.stt_host}:{cfg.wyoming.stt_port}")
@@ -269,6 +272,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--http-port", type=int, default=None)
     parser.add_argument("--http-api-keys-file", default=None)
     parser.add_argument("--whisper-model", default=None)
+    parser.add_argument(
+        "--stt-backend",
+        default=None,
+        choices=["mlx-whisper", "whisperlivekit"],
+        help="mlx-whisper (default): batch, one decode per utterance, more reliable. "
+             "whisperlivekit: streaming with live partial transcripts, but prone to "
+             "occasional word-reordering/trailing-hallucination artifacts.",
+    )
     parser.add_argument("--kokoro-model", default=None)
     parser.add_argument("--kokoro-default-voice", default=None)
     parser.add_argument(
@@ -292,6 +303,7 @@ def _apply_cli_overrides(cfg: Config, args: argparse.Namespace) -> None:
         ("http.port", "http_port", args.http_port),
         ("http.api_keys_file", "http_api_keys_file", args.http_api_keys_file),
         ("models.whisper", "whisper_model", args.whisper_model),
+        ("models.stt_backend", "stt_backend", args.stt_backend),
         ("models.kokoro", "kokoro_model", args.kokoro_model),
         ("models.kokoro_default_voice", "kokoro_default_voice", args.kokoro_default_voice),
         ("wyoming.stt_language", "stt_language", args.stt_language),
@@ -322,6 +334,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # Lazy import real backends only at runtime
     try:
+        from wyoming_mlx.backends.mlx_stt import MlxWhisperBackend
         from wyoming_mlx.backends.mlx_tts import KokoroBackend
         from wyoming_mlx.backends.wlk_stt import WhisperLiveKitBackend
     except ImportError:
@@ -334,7 +347,12 @@ def main(argv: list[str] | None = None) -> None:
     # Ensure model weights are cached locally before backends initialize.
     _ensure_models_cached(cfg.models.kokoro)
 
-    stt_backend = WhisperLiveKitBackend(model=cfg.models.whisper, language=cfg.wyoming.stt_language)
+    if cfg.models.stt_backend == "whisperlivekit":
+        stt_backend: STTBackend = WhisperLiveKitBackend(
+            model=cfg.models.whisper, language=cfg.wyoming.stt_language
+        )
+    else:
+        stt_backend = MlxWhisperBackend(model=cfg.models.whisper, language=cfg.wyoming.stt_language)
     tts_backend = KokoroBackend(model_id=cfg.models.kokoro, voice=cfg.models.kokoro_default_voice)
 
     # Suppress misaki's leaked semaphore warning at shutdown (multiprocessing

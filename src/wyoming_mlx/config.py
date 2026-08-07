@@ -29,7 +29,10 @@ def _env_overrides(prefix: str, delimiter: str = "__") -> dict:
 
 
 class ModelsConfig(BaseModel):
-    whisper: str = "large-v3-turbo"
+    # "mlx-whisper" (default): HF repo id, e.g. "mlx-community/whisper-large-v3-turbo".
+    # "whisperlivekit": WhisperLiveKit model-size name, e.g. "large-v3-turbo".
+    stt_backend: str = "mlx-whisper"
+    whisper: str = "mlx-community/whisper-large-v3-turbo"
     kokoro: str = "hexgrad/Kokoro-82M"
     kokoro_default_voice: str = "af_heart"
 
