@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import AsyncGenerator, AsyncIterator
-from math import gcd
 from typing import Any, cast
 
-import numpy as np
-from scipy.signal import resample_poly
-
+from wyoming_mlx.backends.audio import WHISPER_SAMPLE_RATE, resample_pcm16, resample_to_16k
 from wyoming_mlx.backends.base import STTUpdate
 
 try:
@@ -28,30 +26,8 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-WHISPER_SAMPLE_RATE = 16000
-
-
-def _resample_to_16k(pcm: np.ndarray, sample_rate: int) -> np.ndarray:
-    """Resample float32 mono audio to Whisper's required 16 kHz.
-
-    Whisper produces empty/garbled transcripts when fed audio at the wrong
-    rate, since its mel spectrogram is computed assuming 16 kHz input.
-    """
-    if sample_rate == WHISPER_SAMPLE_RATE:
-        return pcm
-    g = gcd(sample_rate, WHISPER_SAMPLE_RATE)
-    up = WHISPER_SAMPLE_RATE // g
-    down = sample_rate // g
-    return resample_poly(pcm, up, down).astype(np.float32)
-
-
-def resample_pcm16(audio: bytes, sample_rate: int) -> bytes:
-    """Resample int16 mono PCM bytes to 16 kHz int16 mono PCM bytes."""
-    if sample_rate == WHISPER_SAMPLE_RATE:
-        return audio
-    pcm = np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0
-    pcm16k = _resample_to_16k(pcm, sample_rate)
-    return (np.clip(pcm16k, -1.0, 1.0) * 32767.0).astype(np.int16).tobytes()
+# Re-exported for backward compatibility; canonical definitions live in audio.py.
+_resample_to_16k = resample_to_16k
 
 
 def _joined_text(lines: list[Any]) -> str:
@@ -71,14 +47,52 @@ def _delta(emitted: str, confirmed: str) -> str:
     return ""
 
 
+# Common short phrases Whisper hallucinates over near-silent trailing audio
+# (e.g. mic tail captured after the user stopped speaking). Checked against
+# the last sentence of the transcript only, so real speech is never touched.
+_HALLUCINATION_FILLERS: dict[str, set[str]] = {
+    "en": {
+        "okay", "ok", "thank you", "thanks", "thank you for watching",
+        "bye", "bye bye", "goodbye", "see you", "see you next time",
+    },
+    "de": {"okay", "ok", "danke", "tschüss", "bis bald", "vielen dank", "tschau"},
+    "es": {"vale", "gracias", "adiós", "de nada", "ok", "okay"},
+    "it": {"ok", "okay", "grazie", "arrivederci", "ciao"},
+    "ja": {"はい", "ありがとう", "ありがとうございました"},
+}
+
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。！？])\s+")
+
+
+def _strip_trailing_hallucinations(text: str, language: str | None = None) -> str:
+    """Drop trailing filler sentences ("Okay.", "Thank you.", ...) that Whisper
+    hallucinates over near-silent tail audio, most often during the final flush.
+
+    Only removes whole trailing sentences that exactly match a known filler
+    phrase (case-insensitively); real content is never altered.
+    """
+    fillers = set(_HALLUCINATION_FILLERS["en"])
+    if language:
+        fillers |= _HALLUCINATION_FILLERS.get(language.split("-")[0].lower(), set())
+    parts = _SENTENCE_SPLIT_RE.split(text.strip())
+    while len(parts) > 1:
+        candidate = parts[-1].strip().rstrip(".!?。！？").strip().lower()
+        if candidate in fillers:
+            parts.pop()
+        else:
+            break
+    return " ".join(parts).strip()
+
+
 class _WLKSession:
     """One utterance: wraps a WhisperLiveKit AudioProcessor."""
 
-    def __init__(self, engine: Any) -> None:
+    def __init__(self, engine: Any, language: str | None = None) -> None:
         assert _AudioProcessor is not None
         self._processor = _AudioProcessor(transcription_engine=engine)
         self._results: AsyncIterator[Any] | None = None
         self._emitted = ""
+        self._language = language
 
     async def _ensure_started(self) -> AsyncIterator[Any]:
         if self._results is None:
@@ -103,26 +117,20 @@ class _WLKSession:
         # Track the longest confirmed text seen — WLK's final flush frame can
         # return empty front.lines, which must not overwrite a good value.
         best_confirmed = ""
-        buffer_tail = ""
         async for front in results:
             if front.status == "error":
                 raise RuntimeError(f"WhisperLiveKit error: {front.error}")
             candidate = _joined_text(front.lines)
-            buffer_tail = front.buffer_transcription or ""
             if len(candidate) > len(best_confirmed):
                 best_confirmed = candidate
             new_text = _delta(self._emitted, best_confirmed)
             if new_text:
                 self._emitted = best_confirmed
                 yield STTUpdate(text=new_text)
-        # Append trailing buffer text only if it genuinely extends the confirmed
-        # transcript (avoids early words reappearing at the end when the flush
-        # frame leaves the first audio window unconfirmed).
-        if buffer_tail.strip() and not best_confirmed.endswith(buffer_tail.strip()):
-            final = f"{best_confirmed} {buffer_tail.strip()}".strip()
-        else:
-            final = best_confirmed
-        yield STTUpdate(final=final)
+        # Use only confirmed lines as the final transcript. buffer_transcription
+        # after flush is unreliable — Whisper hallucinates silence tokens
+        # ("Okay.", "Thank you.", etc.) that were never actually spoken.
+        yield STTUpdate(final=_strip_trailing_hallucinations(best_confirmed, self._language))
 
 
 class WhisperLiveKitBackend:
@@ -152,6 +160,7 @@ class WhisperLiveKitBackend:
             engine_kwargs["language"] = language
         self._engine = _TranscriptionEngine(**engine_kwargs)
         log.info("[STT] WhisperLiveKit engine ready")
+        self._language = language
 
     def start_session(self) -> _WLKSession:
-        return _WLKSession(self._engine)
+        return _WLKSession(self._engine, language=self._language)
