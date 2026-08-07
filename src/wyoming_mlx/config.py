@@ -46,6 +46,9 @@ class WyomingConfig(BaseModel):
     # BCP-47 language code for Whisper STT, e.g. "en", "de", "ja".
     # None = auto-detect (can cause first-word garbling/reordering artifacts).
     stt_language: str | None = None
+    # whisperlivekit backend only: drop trailing hallucinated filler words
+    # ("Okay.", "Danke.", ...) from the final transcript. No effect on mlx-whisper.
+    stt_filter_hallucinations: bool = True
 
 
 class HttpConfig(BaseModel):

@@ -167,6 +167,13 @@ whisper = "mlx-community/whisper-large-v3-turbo"
 
 Or via CLI: `wyoming-mlx --stt-backend whisperlivekit --whisper-model large-v3-turbo`
 
+`whisperlivekit` also applies a best-effort filter that drops a trailing
+hallucinated filler word/phrase (e.g. "Okay.", "Danke.", "Thank you.") from
+the final transcript, since these are a known Whisper artifact on near-silent
+tail audio. It's enabled by default; disable it with
+`--no-stt-filter-hallucinations` (or config key `wyoming.stt_filter_hallucinations
+= false`) if it ever strips real speech. No effect on `mlx-whisper`.
+
 ### STT language (Whisper)
 
 Whisper supports ~60 languages including `en`, `de`, `it`, `es`, `ja`, and

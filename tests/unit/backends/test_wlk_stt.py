@@ -84,11 +84,16 @@ def test_delta_from_empty_emits_everything():
     assert _delta("", "hello") == "hello"
 
 
-def _session_with_results(fronts: list[SimpleNamespace], language: str | None = None) -> _WLKSession:
+def _session_with_results(
+    fronts: list[SimpleNamespace],
+    language: str | None = None,
+    filter_hallucinations: bool = True,
+) -> _WLKSession:
     """Build a _WLKSession without an AudioProcessor, injecting fabricated results."""
     session = object.__new__(_WLKSession)
     session._emitted = ""
     session._language = language
+    session._filter_hallucinations = filter_hallucinations
 
     async def results():
         for front in fronts:
@@ -132,6 +137,18 @@ async def test_updates_strips_trailing_hallucinated_filler():
     updates = [u async for u in session.updates()]
 
     assert updates[-1].final == "Let's see if this fixes it."
+
+
+async def test_updates_keeps_trailing_filler_when_filter_disabled():
+    """filter_hallucinations=False leaves the confirmed transcript untouched."""
+    session = _session_with_results(
+        [_front(["Let's see if this fixes it.", "Okay."])],
+        filter_hallucinations=False,
+    )
+
+    updates = [u async for u in session.updates()]
+
+    assert updates[-1].final == "Let's see if this fixes it. Okay."
 
 
 def test_strip_trailing_hallucinations_drops_known_filler():

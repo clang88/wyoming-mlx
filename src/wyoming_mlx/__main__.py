@@ -288,6 +288,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="BCP-47 language code for Whisper STT (e.g. 'en', 'de', 'ja'). "
              "Strongly recommended: avoids first-word garbling caused by language auto-detection.",
     )
+    parser.add_argument(
+        "--stt-filter-hallucinations",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="whisperlivekit backend only: drop trailing hallucinated filler words "
+             "('Okay.', 'Danke.', ...) from the final transcript. Default: enabled. "
+             "Use --no-stt-filter-hallucinations to disable. No effect on mlx-whisper.",
+    )
     parser.add_argument("--log-level", default=None)
     return parser.parse_args(argv)
 
@@ -307,6 +315,7 @@ def _apply_cli_overrides(cfg: Config, args: argparse.Namespace) -> None:
         ("models.kokoro", "kokoro_model", args.kokoro_model),
         ("models.kokoro_default_voice", "kokoro_default_voice", args.kokoro_default_voice),
         ("wyoming.stt_language", "stt_language", args.stt_language),
+        ("wyoming.stt_filter_hallucinations", "stt_filter_hallucinations", args.stt_filter_hallucinations),
         ("logging.level", "log_level", args.log_level),
     ]
     for dotpath, _attr, value in overrides:
@@ -349,7 +358,9 @@ def main(argv: list[str] | None = None) -> None:
 
     if cfg.models.stt_backend == "whisperlivekit":
         stt_backend: STTBackend = WhisperLiveKitBackend(
-            model=cfg.models.whisper, language=cfg.wyoming.stt_language
+            model=cfg.models.whisper,
+            language=cfg.wyoming.stt_language,
+            filter_hallucinations=cfg.wyoming.stt_filter_hallucinations,
         )
     else:
         stt_backend = MlxWhisperBackend(model=cfg.models.whisper, language=cfg.wyoming.stt_language)

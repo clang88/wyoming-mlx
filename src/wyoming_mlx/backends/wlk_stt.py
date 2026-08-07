@@ -87,12 +87,18 @@ def _strip_trailing_hallucinations(text: str, language: str | None = None) -> st
 class _WLKSession:
     """One utterance: wraps a WhisperLiveKit AudioProcessor."""
 
-    def __init__(self, engine: Any, language: str | None = None) -> None:
+    def __init__(
+        self,
+        engine: Any,
+        language: str | None = None,
+        filter_hallucinations: bool = True,
+    ) -> None:
         assert _AudioProcessor is not None
         self._processor = _AudioProcessor(transcription_engine=engine)
         self._results: AsyncIterator[Any] | None = None
         self._emitted = ""
         self._language = language
+        self._filter_hallucinations = filter_hallucinations
 
     async def _ensure_started(self) -> AsyncIterator[Any]:
         if self._results is None:
@@ -130,7 +136,10 @@ class _WLKSession:
         # Use only confirmed lines as the final transcript. buffer_transcription
         # after flush is unreliable — Whisper hallucinates silence tokens
         # ("Okay.", "Thank you.", etc.) that were never actually spoken.
-        yield STTUpdate(final=_strip_trailing_hallucinations(best_confirmed, self._language))
+        final = best_confirmed
+        if self._filter_hallucinations:
+            final = _strip_trailing_hallucinations(final, self._language)
+        yield STTUpdate(final=final)
 
 
 class WhisperLiveKitBackend:
@@ -141,7 +150,12 @@ class WhisperLiveKitBackend:
     Each session gets its own AudioProcessor and may run concurrently.
     """
 
-    def __init__(self, model: str = "large-v3-turbo", language: str | None = None) -> None:
+    def __init__(
+        self,
+        model: str = "large-v3-turbo",
+        language: str | None = None,
+        filter_hallucinations: bool = True,
+    ) -> None:
         if "/" in model:
             raise ValueError(
                 f"model must be a WhisperLiveKit size name (e.g. 'large-v3-turbo'), "
@@ -161,6 +175,9 @@ class WhisperLiveKitBackend:
         self._engine = _TranscriptionEngine(**engine_kwargs)
         log.info("[STT] WhisperLiveKit engine ready")
         self._language = language
+        self._filter_hallucinations = filter_hallucinations
 
     def start_session(self) -> _WLKSession:
-        return _WLKSession(self._engine, language=self._language)
+        return _WLKSession(
+            self._engine, language=self._language, filter_hallucinations=self._filter_hallucinations
+        )
