@@ -1,9 +1,11 @@
 # wyoming-mlx
 
-> **Fork** of [rnorth/wyoming-mlx](https://github.com/rnorth/wyoming-mlx) with additional language
-> support, server-name disambiguation, and STT first-word accuracy fixes.
+> **Fork** of [rnorth/wyoming-mlx](https://github.com/rnorth/wyoming-mlx), extended with a
+> selectable batch/streaming STT backend, German TTS support, and a more OpenAI/Open WebUI
+> compatible HTTP API, on top of the original's additional language support, server-name
+> disambiguation, and STT first-word accuracy fixes.
 
-Apple-Silicon-native TTS (Kokoro) and streaming STT (Whisper via WhisperLiveKit) for Home Assistant
+Apple-Silicon-native TTS (Kokoro) and STT (Whisper, batch or streaming) for Home Assistant
 and OpenAI-compatible clients.
 
 ## Why?
@@ -20,7 +22,8 @@ turns it into a fast, fully local speech-to-text and text-to-speech service:
 - **One service, two ecosystems.** Home Assistant talks to it natively over
   the [Wyoming protocol](https://github.com/rhasspy/wyoming) (drop-in
   replacement for `wyoming-faster-whisper`/`wyoming-piper` satellites), while
-  anything that speaks the OpenAI audio API — scripts, editors, chat UIs —
+  anything that speaks the OpenAI audio API — scripts, editors, chat UIs,
+  [Open WebUI](https://github.com/open-webui/open-webui)'s STT/TTS settings —
   can use the same instance via `/v1/audio/transcriptions` and
   `/v1/audio/speech`.
 - **Set-and-forget.** Install with Homebrew, run as a launchd service via
@@ -100,8 +103,9 @@ one key per line, `#` comments allowed. The file should be mode `0600`.
 If the file is missing or empty, all HTTP requests are rejected with 401.
 
 Note that the HTTP API listens on all interfaces by default (set
-`WYOMING_MLX_HTTP__HOST=127.0.0.1` to restrict it), and `GET /v1/models`
-is unauthenticated, matching OpenAI API behaviour.
+`WYOMING_MLX_HTTP__HOST=127.0.0.1` to restrict it), and the model/voice
+listing endpoints (`GET /v1/models`, `/v1/audio/models`, `/v1/audio/voices`)
+are unauthenticated, matching OpenAI API behaviour.
 
 ```bash
 mkdir -p ~/.config/wyoming-mlx
@@ -110,11 +114,28 @@ mkdir -p ~/.config/wyoming-mlx
 
 ## HTTP API
 
+Endpoints and request/response shapes follow the
+[OpenAI audio API](https://developers.openai.com/api/reference/resources/audio),
+so any OpenAI-compatible client — including
+[Open WebUI](https://github.com/open-webui/open-webui)'s STT/TTS engine
+settings — can point at this server as a custom OpenAI endpoint.
+
 ### List models
 
 ```bash
 curl http://localhost:10400/v1/models
+curl http://localhost:10400/v1/audio/models   # TTS-model variant some clients probe first
 ```
+
+### List TTS voices
+
+```bash
+curl http://localhost:10400/v1/audio/voices
+```
+
+Open WebUI's voice picker calls this; without it, it falls back to hardcoded
+OpenAI voice names (`alloy`, `echo`, …) that don't exist in this server's
+Kokoro voice list.
 
 ### Transcribe an audio file
 
@@ -123,6 +144,15 @@ curl http://localhost:10400/v1/audio/transcriptions \
   -H "Authorization: Bearer $API_KEY" \
   -F file=@some.wav
 ```
+
+Accepts the same optional form fields as the OpenAI API:
+
+| Field | Notes |
+|---|---|
+| `language` | BCP-47 hint for this request only, overriding `--stt-language`. Only affects recognition on the `mlx-whisper` backend; on `whisperlivekit` it only affects trailing-hallucination filtering (the engine's language is fixed at startup). |
+| `prompt` | Passed to `mlx-whisper` as `initial_prompt` (style/vocabulary hint). No effect on `whisperlivekit`. |
+| `temperature` | Passed to `mlx-whisper` verbatim. Omit it to keep mlx-whisper's own retry-on-failure temperature ladder. No effect on `whisperlivekit`. |
+| `response_format` | `json` (default, `{"text": …}`) or `text` (raw transcript body). `srt`/`vtt`/`verbose_json` are rejected with a 400. |
 
 ### Synthesize speech
 
