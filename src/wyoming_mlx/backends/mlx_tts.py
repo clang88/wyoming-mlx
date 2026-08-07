@@ -30,7 +30,19 @@ def _patch_kokoro_for_german() -> None:
 
 _patch_kokoro_for_german()
 
-_GERMAN_MODEL_ID = "Tundragoon/Kokoro-German"
+# German voice tensors live in separate repos; the base model weights are the same.
+_GERMAN_VOICE_REPOS: dict[str, str] = {
+    "df_kerstin": "cryptomilk/kokoro-german-kerstin",
+}
+
+
+def _resolve_german_voice(voice: str) -> str:
+    """Return a local .pt path for a German voice, downloading once into the HF cache."""
+    from huggingface_hub import hf_hub_download  # type: ignore[import-not-found]
+    repo_id = _GERMAN_VOICE_REPOS.get(voice)
+    if repo_id is None:
+        raise ValueError(f"Unknown German voice {voice!r}; known: {list(_GERMAN_VOICE_REPOS)}")
+    return hf_hub_download(repo_id=repo_id, filename=f"voices/{voice}.pt")
 
 
 class KokoroBackend:
@@ -111,7 +123,7 @@ class KokoroBackend:
             "pm_alex",
             "pm_santa",
             # German (requires: brew install espeak-ng)
-            "df_eva",
+            "df_kerstin",
         ]
         self._pipeline: object = None
         self._de_pipeline: object = None
@@ -126,7 +138,8 @@ class KokoroBackend:
     def _ensure_de_pipeline(self) -> object:
         if self._de_pipeline is None:
             assert _KPipeline is not None, "kokoro is not installed"
-            self._de_pipeline = _KPipeline(lang_code="d", repo_id=_GERMAN_MODEL_ID, device="mps")
+            # German uses the same base model weights; only the G2P lang_code differs.
+            self._de_pipeline = _KPipeline(lang_code="d", repo_id=self._model_id, device="mps")
         return self._de_pipeline
 
     async def synthesize(self, text: str, voice: str | None = None) -> AsyncIterator[bytes]:
@@ -134,8 +147,13 @@ class KokoroBackend:
         if v not in self.voices:
             raise ValueError(f"unknown voice: {v!r}, expected one of {self.voices}")
         is_german = v.startswith(("df_", "dm_"))
-        pipeline = self._ensure_de_pipeline() if is_german else self._ensure_pipeline()
-        generator = pipeline(text, voice=v)  # pyright: ignore
+        if is_german:
+            pipeline = self._ensure_de_pipeline()
+            voice_arg: str = _resolve_german_voice(v)
+        else:
+            pipeline = self._ensure_pipeline()
+            voice_arg = v
+        generator = pipeline(text, voice=voice_arg)  # pyright: ignore
         buf = io.BytesIO()
         async with self._lock:
             # Serialize all MPS work: the generator yields torch.Tensor results
