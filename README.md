@@ -191,6 +191,7 @@ brew install espeak-ng
 ```
 
 The model is downloaded automatically on first use.
+**Note**: Since the model is not really tranined on German voices, this will sound quite funky. Actual german voice model may be implemented at a later point.
 
 ## Configuration
 
