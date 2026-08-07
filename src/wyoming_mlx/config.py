@@ -35,11 +35,14 @@ class ModelsConfig(BaseModel):
 
 
 class WyomingConfig(BaseModel):
-    stt_host: str = "127.0.0.1"
+    stt_host: str = "0.0.0.0"
     stt_port: int = 10300
-    tts_host: str = "127.0.0.1"
+    tts_host: str = "0.0.0.0"
     tts_port: int = 10200
     stt_max_audio_bytes: int = Field(default=100_000_000, ge=1)
+    # BCP-47 language code for Whisper STT, e.g. "en", "de", "ja".
+    # None = auto-detect (can cause first-word garbling/reordering artifacts).
+    stt_language: str | None = None
 
 
 class HttpConfig(BaseModel):
