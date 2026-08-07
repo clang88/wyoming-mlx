@@ -97,11 +97,22 @@ def _ensure_models_cached(kokoro_model_id: str) -> None:
 _PROJECT_URL = "https://github.com/rnorth/wyoming-mlx"
 
 
+# Whisper supports a wide range of languages; list the most common ones.
+_WHISPER_LANGUAGES = [
+    "af", "ar", "az", "be", "bg", "bs", "ca", "cs", "cy", "da",
+    "de", "el", "en", "es", "et", "fa", "fi", "fr", "gl", "he",
+    "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka", "kk",
+    "kn", "ko", "lt", "lv", "mk", "ml", "mr", "ms", "mt", "nl",
+    "no", "pl", "pt", "ro", "ru", "sk", "sl", "sq", "sr", "sv",
+    "sw", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "zh",
+]
+
+
 def _build_stt_info(model_id: str) -> Info:
     return Info(
         asr=[
             AsrProgram(
-                name="wyoming-mlx",
+                name="wyoming-mlx-stt",
                 attribution=Attribution(name="wyoming-mlx", url=_PROJECT_URL),
                 installed=True,
                 description="WhisperLiveKit streaming STT (MLX)",
@@ -114,7 +125,7 @@ def _build_stt_info(model_id: str) -> Info:
                         installed=True,
                         description=model_id,
                         version="0.1.0",
-                        languages=["en"],
+                        languages=_WHISPER_LANGUAGES,
                     )
                 ],
             )
@@ -122,11 +133,38 @@ def _build_stt_info(model_id: str) -> Info:
     )
 
 
+# Map Kokoro voice prefix to BCP-47 language code.
+_KOKORO_VOICE_LANG: dict[str, str] = {
+    "af": "en-us",  # American English female
+    "am": "en-us",  # American English male
+    "bf": "en-gb",  # British English female
+    "bm": "en-gb",  # British English male
+    "jf": "ja",     # Japanese female
+    "jm": "ja",     # Japanese male
+    "zf": "zh",     # Mandarin Chinese female
+    "zm": "zh",     # Mandarin Chinese male
+    "ef": "es",     # Spanish female
+    "em": "es",     # Spanish male
+    "ff": "fr",     # French female
+    "hf": "hi",     # Hindi female
+    "hm": "hi",     # Hindi male
+    "if": "it",     # Italian female
+    "im": "it",     # Italian male
+    "pf": "pt-br",  # Brazilian Portuguese female
+    "pm": "pt-br",  # Brazilian Portuguese male
+}
+
+
+def _kokoro_voice_language(voice: str) -> str:
+    prefix = voice[:2]
+    return _KOKORO_VOICE_LANG.get(prefix, "en")
+
+
 def _build_tts_info(voices: list[str]) -> Info:
     return Info(
         tts=[
             TtsProgram(
-                name="wyoming-mlx",
+                name="wyoming-mlx-tts",
                 attribution=Attribution(name="wyoming-mlx", url=_PROJECT_URL),
                 installed=True,
                 description="MLX Kokoro TTS",
@@ -138,7 +176,7 @@ def _build_tts_info(voices: list[str]) -> Info:
                         installed=True,
                         description=v,
                         version="0.1.0",
-                        languages=["en"],
+                        languages=[_kokoro_voice_language(v)],
                     )
                     for v in voices
                 ],
@@ -231,6 +269,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--whisper-model", default=None)
     parser.add_argument("--kokoro-model", default=None)
     parser.add_argument("--kokoro-default-voice", default=None)
+    parser.add_argument(
+        "--stt-language",
+        default=None,
+        help="BCP-47 language code for Whisper STT (e.g. 'en', 'de', 'ja'). "
+             "Strongly recommended: avoids first-word garbling caused by language auto-detection.",
+    )
     parser.add_argument("--log-level", default=None)
     return parser.parse_args(argv)
 
@@ -248,6 +292,7 @@ def _apply_cli_overrides(cfg: Config, args: argparse.Namespace) -> None:
         ("models.whisper", "whisper_model", args.whisper_model),
         ("models.kokoro", "kokoro_model", args.kokoro_model),
         ("models.kokoro_default_voice", "kokoro_default_voice", args.kokoro_default_voice),
+        ("wyoming.stt_language", "stt_language", args.stt_language),
         ("logging.level", "log_level", args.log_level),
     ]
     for dotpath, _attr, value in overrides:
@@ -287,7 +332,7 @@ def main(argv: list[str] | None = None) -> None:
     # Ensure model weights are cached locally before backends initialize.
     _ensure_models_cached(cfg.models.kokoro)
 
-    stt_backend = WhisperLiveKitBackend(model=cfg.models.whisper)
+    stt_backend = WhisperLiveKitBackend(model=cfg.models.whisper, language=cfg.wyoming.stt_language)
     tts_backend = KokoroBackend(model_id=cfg.models.kokoro, voice=cfg.models.kokoro_default_voice)
 
     # Suppress misaki's leaked semaphore warning at shutdown (multiprocessing
