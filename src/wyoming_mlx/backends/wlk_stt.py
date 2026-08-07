@@ -100,19 +100,28 @@ class _WLKSession:
 
     async def updates(self) -> AsyncGenerator[STTUpdate, None]:
         results = await self._ensure_started()
-        confirmed = ""
+        # Track the longest confirmed text seen — WLK's final flush frame can
+        # return empty front.lines, which must not overwrite a good value.
+        best_confirmed = ""
         buffer_tail = ""
         async for front in results:
             if front.status == "error":
                 raise RuntimeError(f"WhisperLiveKit error: {front.error}")
-            confirmed = _joined_text(front.lines)
+            candidate = _joined_text(front.lines)
             buffer_tail = front.buffer_transcription or ""
-            new_text = _delta(self._emitted, confirmed)
+            if len(candidate) > len(best_confirmed):
+                best_confirmed = candidate
+            new_text = _delta(self._emitted, best_confirmed)
             if new_text:
-                self._emitted = confirmed
+                self._emitted = best_confirmed
                 yield STTUpdate(text=new_text)
-        # Anything still unconfirmed when the stream ends belongs in the final.
-        final = f"{confirmed} {buffer_tail.strip()}".strip() if buffer_tail.strip() else confirmed
+        # Append trailing buffer text only if it genuinely extends the confirmed
+        # transcript (avoids early words reappearing at the end when the flush
+        # frame leaves the first audio window unconfirmed).
+        if buffer_tail.strip() and not best_confirmed.endswith(buffer_tail.strip()):
+            final = f"{best_confirmed} {buffer_tail.strip()}".strip()
+        else:
+            final = best_confirmed
         yield STTUpdate(final=final)
 
 
@@ -124,7 +133,7 @@ class WhisperLiveKitBackend:
     Each session gets its own AudioProcessor and may run concurrently.
     """
 
-    def __init__(self, model: str = "large-v3-turbo") -> None:
+    def __init__(self, model: str = "large-v3-turbo", language: str | None = None) -> None:
         if "/" in model:
             raise ValueError(
                 f"model must be a WhisperLiveKit size name (e.g. 'large-v3-turbo'), "
@@ -132,13 +141,16 @@ class WhisperLiveKitBackend:
             )
         if not _WLK_AVAILABLE or _TranscriptionEngine is None:
             raise ImportError("whisperlivekit is required but not installed")
-        log.info("Loading WhisperLiveKit engine (model=%s) …", model)
-        self._engine = _TranscriptionEngine(
-            model_size=model,
-            backend="mlx-whisper",
-            backend_policy="simulstreaming",
-            pcm_input=True,
-        )
+        log.info("Loading WhisperLiveKit engine (model=%s, language=%s) …", model, language or "auto")
+        engine_kwargs: dict[str, Any] = {
+            "model_size": model,
+            "backend": "mlx-whisper",
+            "backend_policy": "simulstreaming",
+            "pcm_input": True,
+        }
+        if language:
+            engine_kwargs["language"] = language
+        self._engine = _TranscriptionEngine(**engine_kwargs)
         log.info("[STT] WhisperLiveKit engine ready")
 
     def start_session(self) -> _WLKSession:
