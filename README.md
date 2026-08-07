@@ -1,5 +1,8 @@
 # wyoming-mlx
 
+> **Fork** of [rnorth/wyoming-mlx](https://github.com/rnorth/wyoming-mlx) with additional language
+> support, server-name disambiguation, and STT first-word accuracy fixes.
+
 Apple-Silicon-native TTS (Kokoro) and streaming STT (Whisper via WhisperLiveKit) for Home Assistant
 and OpenAI-compatible clients.
 
