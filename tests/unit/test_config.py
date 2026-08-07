@@ -14,7 +14,8 @@ def test_defaults_when_no_file_no_env(monkeypatch: pytest.MonkeyPatch):
     assert cfg.wyoming.stt_port == 10300
     assert cfg.wyoming.tts_port == 10200
     assert cfg.http.port == 10400
-    assert cfg.models.whisper == "large-v3-turbo"
+    assert cfg.models.stt_backend == "mlx-whisper"
+    assert cfg.models.whisper == "mlx-community/whisper-large-v3-turbo"
     assert cfg.logging.level == "INFO"
 
 

@@ -13,6 +13,7 @@ from wyoming_mlx.backends.wlk_stt import (
     _delta,
     _joined_text,
     _resample_to_16k,
+    _strip_trailing_hallucinations,
     _WLKSession,
     resample_pcm16,
 )
@@ -83,10 +84,11 @@ def test_delta_from_empty_emits_everything():
     assert _delta("", "hello") == "hello"
 
 
-def _session_with_results(fronts: list[SimpleNamespace]) -> _WLKSession:
+def _session_with_results(fronts: list[SimpleNamespace], language: str | None = None) -> _WLKSession:
     """Build a _WLKSession without an AudioProcessor, injecting fabricated results."""
     session = object.__new__(_WLKSession)
     session._emitted = ""
+    session._language = language
 
     async def results():
         for front in fronts:
@@ -105,7 +107,9 @@ def _front(texts: list[str | None], buffer: str = "", status: str = "active_tran
     )
 
 
-async def test_updates_emits_deltas_then_final_with_buffer_tail():
+async def test_updates_emits_deltas_then_final_ignoring_buffer_tail():
+    """buffer_transcription is dropped from the final — it's speculative and
+    unreliable (Whisper hallucinates silence tokens there after flush)."""
     session = _session_with_results(
         [
             _front(["hello"]),
@@ -116,7 +120,43 @@ async def test_updates_emits_deltas_then_final_with_buffer_tail():
     updates = [u async for u in session.updates()]
 
     assert [u.text for u in updates[:-1]] == ["hello", " world"]
-    assert updates[-1].final == "hello world tail"
+    assert updates[-1].final == "hello world"
+
+
+async def test_updates_strips_trailing_hallucinated_filler():
+    """A confirmed 'Okay.' tacked on after real speech is dropped from the final."""
+    session = _session_with_results(
+        [_front(["Let's see if this fixes it.", "Okay."])],
+    )
+
+    updates = [u async for u in session.updates()]
+
+    assert updates[-1].final == "Let's see if this fixes it."
+
+
+def test_strip_trailing_hallucinations_drops_known_filler():
+    text = "This is the real sentence. Okay."
+    assert _strip_trailing_hallucinations(text) == "This is the real sentence."
+
+
+def test_strip_trailing_hallucinations_drops_repeated_filler():
+    text = "This is the real sentence. Okay. Okay."
+    assert _strip_trailing_hallucinations(text) == "This is the real sentence."
+
+
+def test_strip_trailing_hallucinations_uses_language_specific_fillers():
+    text = "Das ist der echte Satz. Danke."
+    assert _strip_trailing_hallucinations(text, language="de") == "Das ist der echte Satz."
+
+
+def test_strip_trailing_hallucinations_leaves_real_content_untouched():
+    text = "Turn on the kitchen light."
+    assert _strip_trailing_hallucinations(text) == text
+
+
+def test_strip_trailing_hallucinations_leaves_sole_filler_utterance():
+    # If the entire utterance is just the filler word, it's presumably real speech.
+    assert _strip_trailing_hallucinations("Okay.") == "Okay."
 
 
 async def test_updates_yields_only_final_when_nothing_confirmed():
