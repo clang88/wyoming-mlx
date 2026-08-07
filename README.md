@@ -142,13 +142,41 @@ curl http://localhost:10400/v1/audio/speech \
 
 Settings → Integrations → Wyoming Protocol → Add:
 
-- STT: `<host>:10300`
-- TTS: `<host>:10200`
+- STT: `<host>:10300`  (appears as **wyoming-mlx-stt**)
+- TTS: `<host>:10200`  (appears as **wyoming-mlx-tts**)
 
-No keys, no TLS (HA convention, trusted LAN).
+No keys, no TLS (HA convention, trusted LAN). Both Wyoming servers bind to
+`0.0.0.0` by default so they are reachable from HA on the same LAN; set
+`WYOMING_MLX_WYOMING__STT_HOST` / `WYOMING_MLX_WYOMING__TTS_HOST` to restrict.
 
 Streaming transcripts (live partial results) require Home Assistant 2025.7 or
 newer; older versions still receive the final transcript exactly as before.
+
+## Language support
+
+### STT (Whisper)
+
+Whisper supports ~60 languages including `en`, `de`, `it`, `es`, `ja`, and
+most other major languages. Set `--stt-language <code>` (or config key
+`wyoming.stt_language`) to the BCP-47 code for your language. **This is
+strongly recommended:** without it, Whisper auto-detects the language from
+the first audio window, which can cause the first few words to be garbled or
+appear at the end of the transcript.
+
+```toml
+[wyoming]
+stt_language = "en"   # or "de", "it", "es", "ja", …
+```
+
+Or via CLI: `wyoming-mlx --stt-language en`
+
+### TTS (Kokoro)
+
+Kokoro voices cover: `en-us`, `en-gb`, `ja`, `es`, `fr`, `hi`, `it`, `pt-br`,
+`zh`. **German (`de`) is not currently supported by Kokoro.**
+Voice names encode their language via prefix (`af_`/`am_` = American English,
+`jf_`/`jm_` = Japanese, `if_`/`im_` = Italian, `ef_`/`em_` = Spanish, etc.).
+Home Assistant will filter voices by language automatically.
 
 ## Configuration
 
