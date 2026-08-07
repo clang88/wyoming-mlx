@@ -176,10 +176,20 @@ Or via CLI: `wyoming-mlx --stt-language en`
 ### TTS (Kokoro)
 
 Kokoro voices cover: `en-us`, `en-gb`, `ja`, `es`, `fr`, `hi`, `it`, `pt-br`,
-`zh`. **German (`de`) is not currently supported by Kokoro.**
-Voice names encode their language via prefix (`af_`/`am_` = American English,
-`jf_`/`jm_` = Japanese, `if_`/`im_` = Italian, `ef_`/`em_` = Spanish, etc.).
+`zh`, **`de`**. Voice names encode their language via prefix (`af_`/`am_` = American English,
+`jf_`/`jm_` = Japanese, `if_`/`im_` = Italian, `ef_`/`em_` = Spanish,
+`df_`/`dm_` = German, etc.).
 Home Assistant will filter voices by language automatically.
+
+German voices (`df_eva`, …) use the community model
+[Tundragoon/Kokoro-German](https://huggingface.co/Tundragoon/Kokoro-German) and
+require `espeak-ng` for German G2P:
+
+```bash
+brew install espeak-ng
+```
+
+The model is downloaded automatically on first use.
 
 ## Configuration
 
