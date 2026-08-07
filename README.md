@@ -183,7 +183,7 @@ Home Assistant will filter voices by language automatically.
 
 German voices (`df_kerstin`, …) use community voice tensors (e.g.
 [cryptomilk/kokoro-german-kerstin](https://huggingface.co/cryptomilk/kokoro-german-kerstin))
-on top of the same `hexgrad/Kokoro-82M` base model, and require `espeak-ng`
+on top of the same configured Kokoro model (`mlx-community/Kokoro-82M-bf16` by default), and require `espeak-ng`
 for German G2P:
 
 ```bash
