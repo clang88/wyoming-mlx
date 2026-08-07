@@ -152,6 +152,8 @@ _KOKORO_VOICE_LANG: dict[str, str] = {
     "im": "it",     # Italian male
     "pf": "pt-br",  # Brazilian Portuguese female
     "pm": "pt-br",  # Brazilian Portuguese male
+    "df": "de",     # German female (Tundragoon/Kokoro-German)
+    "dm": "de",     # German male   (Tundragoon/Kokoro-German)
 }
 
 
