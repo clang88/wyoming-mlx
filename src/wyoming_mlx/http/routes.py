@@ -39,20 +39,28 @@ def _require_api_key(api_keys: set[str]):
     return dep
 
 
+def _sniff_audio_format(raw: bytes) -> str | None:
+    """Best-effort audio container/format detection from magic bytes."""
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WAVE":
+        return "WAV"
+    if raw[:4] == b"fLaC":
+        return "FLAC"
+    if raw[:4] == b"OggS":
+        return "OGG"
+    if raw[:3] == b"ID3" or (raw[0] == 0xFF and (raw[1] & 0xE0) == 0xE0):
+        # ID3v2 tag (ffmpeg/OpenWebUI's default mp3 muxer prepends one) or a
+        # raw MPEG frame sync word (any MPEG version/layer, not just v1 layer 3).
+        return "MP3"
+    return None
+
+
 def _decode_audio_to_pcm16_mono(raw: bytes) -> tuple[bytes, int]:
     """Decode an uploaded audio file to int16 mono PCM and return (pcm, sample_rate)."""
     if len(raw) < 12:
         raise HTTPException(status_code=400, detail="audio file too small")
 
-    if raw[:4] == b"RIFF" and raw[8:12] == b"WAVE":
-        detected = "WAV"
-    elif raw[:4] == b"fLaC":
-        detected = "FLAC"
-    elif raw[:4] == b"OggS":
-        detected = "OGG"
-    elif raw[:2] in (b"\xff\xfb", b"\xff\xfa"):
-        detected = "MP3"
-    else:
+    detected = _sniff_audio_format(raw)
+    if detected is None:
         raise HTTPException(
             status_code=400,
             detail="unsupported audio format; only WAV, FLAC, OGG, MP3 accepted",

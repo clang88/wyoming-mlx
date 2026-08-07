@@ -169,6 +169,27 @@ async def test_transcriptions_rejects_unknown_magic():
     assert "unsupported audio format" in str(exc_info.value.detail)
 
 
+def test_sniff_audio_format_detects_id3_tagged_mp3():
+    # ffmpeg's default mp3 muxer prepends an ID3v2 tag before the MPEG frames
+    # (e.g. OpenWebUI's webm->mp3 conversion pipeline).
+    from wyoming_mlx.http.routes import _sniff_audio_format
+
+    assert _sniff_audio_format(b"ID3\x03\x00\x00\x00\x00\x00\x00rest") == "MP3"
+
+
+def test_sniff_audio_format_detects_raw_mpeg_frame_sync():
+    from wyoming_mlx.http.routes import _sniff_audio_format
+
+    assert _sniff_audio_format(b"\xff\xfb\x90\x00" + b"\x00" * 8) == "MP3"
+    assert _sniff_audio_format(b"\xff\xe3\x90\x00" + b"\x00" * 8) == "MP3"  # MPEG2.5 layer 3
+
+
+def test_sniff_audio_format_returns_none_for_unknown():
+    from wyoming_mlx.http.routes import _sniff_audio_format
+
+    assert _sniff_audio_format(b"This is not audio!!") is None
+
+
 @pytest.mark.asyncio
 async def test_speech_rejects_unknown_voice(client: AsyncClient):
     r = await client.post(
