@@ -71,3 +71,28 @@ async def test_session_finish_with_no_audio_yields_empty_final(monkeypatch: pyte
 
     assert updates[0].final == ""
     assert len(fake.calls) == 0
+
+
+async def test_updates_waits_for_finish_when_consumed_concurrently(monkeypatch: pytest.MonkeyPatch):
+    """Regression test: the Wyoming handler starts consuming updates() via a
+    background task immediately on session creation, before finish() runs.
+    updates() must block until finish() completes, not yield a stale ""."""
+    fake = _FakeMlxWhisper(text="turn off the lights")
+    monkeypatch.setattr(mlx_stt, "_mlx_whisper", fake)
+
+    session = _BatchSession(model="some/model", language="en", lock=asyncio.Lock())
+
+    async def pump() -> str:
+        final = ""
+        async for update in session.updates():
+            if update.final is not None:
+                final = update.final
+        return final
+
+    pump_task = asyncio.create_task(pump())
+    await asyncio.sleep(0)  # let the pump task start consuming updates() first
+
+    await session.feed(np.zeros(1600, dtype=np.int16).tobytes(), 16000)
+    await session.finish()
+
+    assert await pump_task == "turn off the lights"

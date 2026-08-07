@@ -40,6 +40,9 @@ class _BatchSession:
         self._lock = lock
         self._chunks: list[bytes] = []
         self._final = ""
+        # updates() is consumed by a pump task started immediately on AudioStart,
+        # before finish() has run; gate the yield so it doesn't race ahead.
+        self._finished = asyncio.Event()
 
     async def feed(self, audio: bytes, sample_rate: int) -> None:
         self._chunks.append(resample_pcm16(audio, sample_rate))
@@ -48,25 +51,33 @@ class _BatchSession:
         raw = b"".join(self._chunks)
         if not raw:
             self._final = ""
+            self._finished.set()
             return
         pcm = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
         assert _mlx_whisper is not None
-        # mlx-whisper's model cache is process-global and not concurrency-safe;
-        # serialize decodes and run the blocking call off the event loop.
-        async with self._lock:
-            result = await asyncio.to_thread(
-                _mlx_whisper.transcribe,
-                pcm,
-                path_or_hf_repo=self._model,
-                language=self._language,
-            )
-        self._final = (result.get("text") or "").strip()
+        try:
+            # mlx-whisper's model cache is process-global and not concurrency-safe;
+            # serialize decodes and run the blocking call off the event loop.
+            async with self._lock:
+                result = await asyncio.to_thread(
+                    _mlx_whisper.transcribe,
+                    pcm,
+                    path_or_hf_repo=self._model,
+                    language=self._language,
+                )
+            self._final = (result.get("text") or "").strip()
+        finally:
+            self._finished.set()
 
     async def close(self) -> None:
         self._chunks = []
+        self._finished.set()
 
     async def updates(self) -> AsyncGenerator[STTUpdate, None]:
-        # No incremental partials: the whole utterance is decoded in one pass.
+        # No incremental partials: wait for finish() to populate the final text
+        # before yielding it (this generator is consumed concurrently with
+        # feed()/finish(), starting right after the session is created).
+        await self._finished.wait()
         yield STTUpdate(final=self._final)
 
 
