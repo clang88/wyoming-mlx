@@ -43,8 +43,21 @@ class FakeSTTBackend:
         self.transcript = transcript
         self.partials = partials or []
         self.sessions: list[FakeSTTSession] = []
+        # Records the overrides passed to the most recent start_session() call.
+        self.last_language: str | None = None
+        self.last_prompt: str | None = None
+        self.last_temperature: float | None = None
 
-    def start_session(self) -> FakeSTTSession:
+    def start_session(
+        self,
+        *,
+        language: str | None = None,
+        prompt: str | None = None,
+        temperature: float | None = None,
+    ) -> FakeSTTSession:
+        self.last_language = language
+        self.last_prompt = prompt
+        self.last_temperature = temperature
         session = FakeSTTSession(list(self.partials), self.transcript)
         self.sessions.append(session)
         return session

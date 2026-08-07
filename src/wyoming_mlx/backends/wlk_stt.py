@@ -177,7 +177,19 @@ class WhisperLiveKitBackend:
         self._language = language
         self._filter_hallucinations = filter_hallucinations
 
-    def start_session(self) -> _WLKSession:
+    def start_session(
+        self,
+        *,
+        language: str | None = None,
+        prompt: str | None = None,
+        temperature: float | None = None,
+    ) -> _WLKSession:
+        # The recognition language is baked into self._engine at construction
+        # (re-loading it per request isn't practical); a per-request override
+        # only affects trailing-hallucination filtering below. prompt/temperature
+        # have no equivalent in WhisperLiveKit's streaming decode and are ignored.
         return _WLKSession(
-            self._engine, language=self._language, filter_hallucinations=self._filter_hallucinations
+            self._engine,
+            language=language or self._language,
+            filter_hallucinations=self._filter_hallucinations,
         )

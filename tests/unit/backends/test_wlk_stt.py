@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -193,3 +194,32 @@ async def test_updates_raises_on_error_status():
     with pytest.raises(RuntimeError, match="boom"):
         async for _ in session.updates():
             pass
+
+
+def test_backend_start_session_language_override_only_affects_filtering(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The recognition engine's language is fixed at construction; a per-request
+    override is only honoured for trailing-hallucination filtering."""
+    import wyoming_mlx.backends.wlk_stt as wlk_stt_module
+
+    created: list[dict[str, Any]] = []
+
+    class _FakeAudioProcessor:
+        def __init__(self, **kwargs: Any) -> None:
+            created.append(kwargs)
+
+    monkeypatch.setattr(wlk_stt_module, "_AudioProcessor", _FakeAudioProcessor)
+
+    backend = object.__new__(WhisperLiveKitBackend)
+    backend._engine = cast(Any, object())
+    backend._language = "en"
+    backend._filter_hallucinations = True
+
+    session = backend.start_session(language="de")
+
+    assert session._language == "de"
+    assert created[-1]["transcription_engine"] is backend._engine
+
+    default_session = backend.start_session()
+    assert default_session._language == "en"

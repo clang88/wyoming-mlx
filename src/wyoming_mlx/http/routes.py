@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 import numpy as np
 import soundfile as sf
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from wyoming_mlx.backends.base import STTBackend, TTSBackend, collect_transcript
@@ -123,11 +123,34 @@ def build_router(
         data.append({"id": models.whisper, "object": "model", "owned_by": "wyoming-mlx"})
         return {"object": "list", "data": data}
 
+    @router.get("/v1/audio/voices")
+    async def list_voices() -> dict:
+        # Open WebUI (and other OpenAI-compatible clients) call this to populate
+        # the TTS voice picker; without it they fall back to hardcoded OpenAI
+        # voice names (alloy, echo, ...) that don't exist in `tts.voices`.
+        return {"voices": [{"id": v, "name": v} for v in tts.voices]}
+
+    @router.get("/v1/audio/models")
+    async def list_audio_models() -> dict:
+        return {"models": [{"id": models.kokoro}]}
+
     @router.post("/v1/audio/transcriptions", dependencies=[auth])
     async def transcribe(
         file: UploadFile = File(...),  # noqa: B008
         model: str | None = Form(None),
-    ) -> dict:
+        language: str | None = Form(None),
+        prompt: str | None = Form(None),
+        response_format: str = Form("json"),
+        temperature: float | None = Form(None),
+    ):
+        if response_format not in ("json", "text"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"unsupported response_format: {response_format!r}; "
+                    "only 'json' and 'text' are supported"
+                ),
+            )
         if file.size is not None and file.size > 100_000_000:
             raise HTTPException(status_code=413, detail="audio file exceeds 100MB limit")
         raw = await file.read()
@@ -135,9 +158,13 @@ def build_router(
             raise HTTPException(status_code=413, detail="audio file exceeds 100MB limit")
         pcm, rate = _decode_audio_to_pcm16_mono(raw)
         try:
-            text = await collect_transcript(stt, pcm, rate)
+            text = await collect_transcript(
+                stt, pcm, rate, language=language, prompt=prompt, temperature=temperature
+            )
         except Exception as exc:
             raise HTTPException(status_code=500, detail="transcription failed") from exc
+        if response_format == "text":
+            return PlainTextResponse(text)
         return {"text": text}
 
     @router.post("/v1/audio/speech", dependencies=[auth])

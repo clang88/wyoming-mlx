@@ -38,12 +38,31 @@ class STTBackend(Protocol):
     implementation may serialise GPU work internally.
     """
 
-    def start_session(self) -> STTSession: ...
+    def start_session(
+        self,
+        *,
+        language: str | None = None,
+        prompt: str | None = None,
+        temperature: float | None = None,
+    ) -> STTSession: ...
 
 
-async def collect_transcript(backend: STTBackend, audio: bytes, sample_rate: int) -> str:
-    """Run one complete utterance through a session and return the final text."""
-    session = backend.start_session()
+async def collect_transcript(
+    backend: STTBackend,
+    audio: bytes,
+    sample_rate: int,
+    *,
+    language: str | None = None,
+    prompt: str | None = None,
+    temperature: float | None = None,
+) -> str:
+    """Run one complete utterance through a session and return the final text.
+
+    `language`/`prompt`/`temperature` are per-request overrides (e.g. from the
+    OpenAI-compatible HTTP API); backends that can't honour one silently
+    ignore it and fall back to their configured default.
+    """
+    session = backend.start_session(language=language, prompt=prompt, temperature=temperature)
     try:
         await session.feed(audio, sample_rate)
         await session.finish()

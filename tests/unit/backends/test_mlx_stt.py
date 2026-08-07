@@ -18,9 +18,23 @@ class _FakeMlxWhisper:
         self.calls: list[dict] = []
         self.text = text
 
-    def transcribe(self, audio, *, path_or_hf_repo, language=None):
+    def transcribe(
+        self,
+        audio: object,
+        *,
+        path_or_hf_repo: str,
+        language: str | None = None,
+        initial_prompt: str | None = None,
+        temperature: float | None = None,
+    ) -> dict:
         self.calls.append(
-            {"audio": audio, "path_or_hf_repo": path_or_hf_repo, "language": language}
+            {
+                "audio": audio,
+                "path_or_hf_repo": path_or_hf_repo,
+                "language": language,
+                "initial_prompt": initial_prompt,
+                "temperature": temperature,
+            }
         )
         return {"text": self.text}
 
@@ -96,3 +110,46 @@ async def test_updates_waits_for_finish_when_consumed_concurrently(monkeypatch: 
     await session.finish()
 
     assert await pump_task == "turn off the lights"
+
+
+async def test_session_forwards_prompt_and_temperature_when_set(monkeypatch: pytest.MonkeyPatch):
+    fake = _FakeMlxWhisper()
+    monkeypatch.setattr(mlx_stt, "_mlx_whisper", fake)
+
+    session = _BatchSession(
+        model="some/model", language="en", lock=asyncio.Lock(), prompt="hint", temperature=0.4
+    )
+    await session.feed(np.zeros(1600, dtype=np.int16).tobytes(), 16000)
+    await session.finish()
+
+    assert fake.calls[0]["initial_prompt"] == "hint"
+    assert fake.calls[0]["temperature"] == 0.4
+
+
+async def test_session_omits_prompt_and_temperature_when_unset(monkeypatch: pytest.MonkeyPatch):
+    """Only pass temperature/initial_prompt through when explicitly requested,
+    so mlx-whisper's own retry-on-failure temperature ladder stays active by
+    default."""
+    fake = _FakeMlxWhisper()
+    monkeypatch.setattr(mlx_stt, "_mlx_whisper", fake)
+
+    session = _BatchSession(model="some/model", language="en", lock=asyncio.Lock())
+    await session.feed(np.zeros(1600, dtype=np.int16).tobytes(), 16000)
+    await session.finish()
+
+    assert fake.calls[0]["initial_prompt"] is None
+    assert fake.calls[0]["temperature"] is None
+
+
+def test_backend_start_session_overrides_default_language(monkeypatch: pytest.MonkeyPatch):
+    fake = _FakeMlxWhisper()
+    monkeypatch.setattr(mlx_stt, "_MLX_WHISPER_AVAILABLE", True)
+    monkeypatch.setattr(mlx_stt, "_mlx_whisper", fake)
+
+    backend = MlxWhisperBackend(model="some/model", language="en")
+
+    session = backend.start_session(language="de")
+    assert session._language == "de"
+
+    default_session = backend.start_session()
+    assert default_session._language == "en"

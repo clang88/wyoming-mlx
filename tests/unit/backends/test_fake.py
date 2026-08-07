@@ -47,6 +47,17 @@ async def test_fake_stt_session_yields_partials_then_final():
     assert session.fed == [(b"\x01\x02", 16000)]
 
 
+@pytest.mark.asyncio
+async def test_collect_transcript_forwards_language_prompt_temperature():
+    backend = FakeSTTBackend(transcript="hi")
+    await collect_transcript(
+        backend, b"abc", sample_rate=16000, language="de", prompt="hint", temperature=0.2
+    )
+    assert backend.last_language == "de"
+    assert backend.last_prompt == "hint"
+    assert backend.last_temperature == 0.2
+
+
 async def test_fake_stt_session_final_waits_for_finish():
     backend = FakeSTTBackend(transcript="done")
     session = backend.start_session()

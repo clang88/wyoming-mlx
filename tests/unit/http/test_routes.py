@@ -33,8 +33,12 @@ def _wav_bytes(pcm: bytes, sample_rate: int = 16000) -> bytes:
 
 
 @pytest.fixture
-def app() -> FastAPI:
-    stt = FakeSTTBackend(transcript="hi there")
+def stt() -> FakeSTTBackend:
+    return FakeSTTBackend(transcript="hi there")
+
+
+@pytest.fixture
+def app(stt: FakeSTTBackend) -> FastAPI:
     tts = FakeTTSBackend(
         chunks=[b"\x01\x02", b"\x03\x04"],
         voices=["alice", "bob"],
@@ -44,7 +48,7 @@ def app() -> FastAPI:
         stt=stt,
         tts=tts,
         api_keys={"sekret"},
-        models=ModelsConfig(whisper="large-v3-turbo"),
+        models=ModelsConfig(whisper="large-v3-turbo", kokoro="hexgrad/Kokoro-82M"),
     )
 
 
@@ -220,3 +224,60 @@ async def test_transcriptions_accepts_stereo_audio(client: AsyncClient):
     )
     assert r.status_code == 200
     assert r.json() == {"text": "hi there"}
+
+
+@pytest.mark.asyncio
+async def test_voices_route_lists_tts_voices(client: AsyncClient):
+    r = await client.get("/v1/audio/voices")
+    assert r.status_code == 200
+    body = r.json()
+    assert body == {"voices": [{"id": "alice", "name": "alice"}, {"id": "bob", "name": "bob"}]}
+
+
+@pytest.mark.asyncio
+async def test_audio_models_route_lists_kokoro_model(client: AsyncClient):
+    r = await client.get("/v1/audio/models")
+    assert r.status_code == 200
+    assert r.json() == {"models": [{"id": "hexgrad/Kokoro-82M"}]}
+
+
+@pytest.mark.asyncio
+async def test_transcriptions_forwards_language_and_prompt(
+    client: AsyncClient, stt: FakeSTTBackend
+):
+    r = await client.post(
+        "/v1/audio/transcriptions",
+        headers={"Authorization": "Bearer sekret"},
+        files={"file": ("a.wav", _wav_bytes(b"\x00" * 1600), "audio/wav")},
+        data={"language": "de", "prompt": "some hint", "temperature": "0.2"},
+    )
+    assert r.status_code == 200
+    assert stt.last_language == "de"
+    assert stt.last_prompt == "some hint"
+    assert stt.last_temperature == 0.2
+
+
+@pytest.mark.asyncio
+async def test_transcriptions_response_format_text_returns_plain_text(client: AsyncClient):
+    r = await client.post(
+        "/v1/audio/transcriptions",
+        headers={"Authorization": "Bearer sekret"},
+        files={"file": ("a.wav", _wav_bytes(b"\x00" * 1600), "audio/wav")},
+        data={"response_format": "text"},
+    )
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+    assert r.text == "hi there"
+
+
+@pytest.mark.asyncio
+async def test_transcriptions_rejects_unsupported_response_format(client: AsyncClient):
+    r = await client.post(
+        "/v1/audio/transcriptions",
+        headers={"Authorization": "Bearer sekret"},
+        files={"file": ("a.wav", _wav_bytes(b"\x00" * 1600), "audio/wav")},
+        data={"response_format": "verbose_json"},
+    )
+    assert r.status_code == 400
+    assert "unsupported response_format" in r.json()["detail"]
+

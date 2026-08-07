@@ -34,10 +34,20 @@ log = logging.getLogger(__name__)
 class _BatchSession:
     """One utterance: buffers PCM in memory, transcribes once on finish()."""
 
-    def __init__(self, model: str, language: str | None, lock: asyncio.Lock) -> None:
+    def __init__(
+        self,
+        model: str,
+        language: str | None,
+        lock: asyncio.Lock,
+        *,
+        prompt: str | None = None,
+        temperature: float | None = None,
+    ) -> None:
         self._model = model
         self._language = language
         self._lock = lock
+        self._prompt = prompt
+        self._temperature = temperature
         self._chunks: list[bytes] = []
         self._final = ""
         # updates() is consumed by a pump task started immediately on AudioStart,
@@ -55,16 +65,19 @@ class _BatchSession:
             return
         pcm = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
         assert _mlx_whisper is not None
+        kwargs: dict = {"path_or_hf_repo": self._model, "language": self._language}
+        if self._prompt is not None:
+            kwargs["initial_prompt"] = self._prompt
+        if self._temperature is not None:
+            # Only override mlx-whisper's own temperature *fallback ladder* when the
+            # caller explicitly asked for one; a bare 0.0 default here would disable
+            # its automatic retry-on-failure behaviour for every request.
+            kwargs["temperature"] = self._temperature
         try:
             # mlx-whisper's model cache is process-global and not concurrency-safe;
             # serialize decodes and run the blocking call off the event loop.
             async with self._lock:
-                result = await asyncio.to_thread(
-                    _mlx_whisper.transcribe,
-                    pcm,
-                    path_or_hf_repo=self._model,
-                    language=self._language,
-                )
+                result = await asyncio.to_thread(_mlx_whisper.transcribe, pcm, **kwargs)
             self._final = (result.get("text") or "").strip()
         finally:
             self._finished.set()
@@ -109,5 +122,17 @@ class MlxWhisperBackend:
         )
         log.info("[STT] mlx-whisper model ready")
 
-    def start_session(self) -> _BatchSession:
-        return _BatchSession(self._model, self._language, self._lock)
+    def start_session(
+        self,
+        *,
+        language: str | None = None,
+        prompt: str | None = None,
+        temperature: float | None = None,
+    ) -> _BatchSession:
+        return _BatchSession(
+            self._model,
+            language if language is not None else self._language,
+            self._lock,
+            prompt=prompt,
+            temperature=temperature,
+        )
