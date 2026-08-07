@@ -23,6 +23,7 @@ from wyoming.info import (
 )
 from wyoming.server import AsyncServer
 
+from wyoming_mlx import __version__
 from wyoming_mlx.auth import load_api_keys
 from wyoming_mlx.backends.base import STTBackend, TTSBackend
 from wyoming_mlx.config import Config, load_config
@@ -119,7 +120,7 @@ def _build_stt_info(model_id: str, *, streaming: bool) -> Info:
                 attribution=Attribution(name="wyoming-mlx", url=_PROJECT_URL),
                 installed=True,
                 description=description,
-                version="0.1.0",
+                version=__version__,
                 supports_transcript_streaming=streaming,
                 models=[
                     AsrModel(
@@ -127,7 +128,7 @@ def _build_stt_info(model_id: str, *, streaming: bool) -> Info:
                         attribution=Attribution(name="OpenAI/MLX", url=_PROJECT_URL),
                         installed=True,
                         description=model_id,
-                        version="0.1.0",
+                        version=__version__,
                         languages=_WHISPER_LANGUAGES,
                     )
                 ],
@@ -173,14 +174,14 @@ def _build_tts_info(voices: list[str]) -> Info:
                 attribution=Attribution(name="wyoming-mlx", url=_PROJECT_URL),
                 installed=True,
                 description="MLX Kokoro TTS",
-                version="0.1.0",
+                version=__version__,
                 voices=[
                     TtsVoice(
                         name=v,
                         attribution=Attribution(name="Kokoro", url=_PROJECT_URL),
                         installed=True,
                         description=v,
-                        version="0.1.0",
+                        version=__version__,
                         languages=[_kokoro_voice_language(v)],
                     )
                     for v in voices
