@@ -18,6 +18,21 @@ except ImportError:
     _KPipeline = None  # type: ignore[assignment,misc]
 
 
+def _patch_kokoro_for_german() -> None:
+    """Add lang_code='d' (German via espeak-ng) to the installed kokoro pipeline."""
+    try:
+        import kokoro.pipeline as _kp  # type: ignore[import-not-found]
+        _kp.LANG_CODES.setdefault("d", "de")
+        _kp.ALIASES.setdefault("de", "d")
+    except Exception:
+        pass
+
+
+_patch_kokoro_for_german()
+
+_GERMAN_MODEL_ID = "Tundragoon/Kokoro-German"
+
+
 class KokoroBackend:
     """TTS backend powered by Kokoro-82M via PyTorch MPS."""
 
@@ -95,8 +110,11 @@ class KokoroBackend:
             "pf_dora",
             "pm_alex",
             "pm_santa",
+            # German (requires: brew install espeak-ng)
+            "df_eva",
         ]
         self._pipeline: object = None
+        self._de_pipeline: object = None
         self._lock = asyncio.Lock()
 
     def _ensure_pipeline(self) -> object:
@@ -105,11 +123,18 @@ class KokoroBackend:
             self._pipeline = _KPipeline(lang_code="a", repo_id=self._model_id, device="mps")
         return self._pipeline
 
+    def _ensure_de_pipeline(self) -> object:
+        if self._de_pipeline is None:
+            assert _KPipeline is not None, "kokoro is not installed"
+            self._de_pipeline = _KPipeline(lang_code="d", repo_id=_GERMAN_MODEL_ID, device="mps")
+        return self._de_pipeline
+
     async def synthesize(self, text: str, voice: str | None = None) -> AsyncIterator[bytes]:
         v = voice or self._voice
         if v not in self.voices:
             raise ValueError(f"unknown voice: {v!r}, expected one of {self.voices}")
-        pipeline = self._ensure_pipeline()
+        is_german = v.startswith(("df_", "dm_"))
+        pipeline = self._ensure_de_pipeline() if is_german else self._ensure_pipeline()
         generator = pipeline(text, voice=v)  # pyright: ignore
         buf = io.BytesIO()
         async with self._lock:
