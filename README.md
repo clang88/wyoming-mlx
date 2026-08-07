@@ -49,20 +49,13 @@ brew services start wyoming-mlx
 Logs go to `$(brew --prefix)/var/log/wyoming-mlx.log`. Apple Silicon only.
 
 > [!WARNING]
-> **Upgraders:** the `models.whisper` config value (TOML `[models] whisper =
-> ...`, CLI `--whisper-model`, env `WYOMING_MLX_MODELS__WHISPER`) changed
-> meaning in this release. It used to be a Hugging Face repo ID (e.g.
-> `mlx-community/distil-whisper-large-v3`); it is now a WhisperLiveKit
-> model-size name: `tiny`, `base`, `small`, `medium`, `large-v3`, or
-> `large-v3-turbo` (default `large-v3-turbo`). An old repo-ID value (anything
-> containing `/`) is rejected at startup with a clear error. Update your
-> config, for example:
->
-> ```toml
-> [models]
-> # before:  whisper = "mlx-community/distil-whisper-large-v3"
-> whisper = "large-v3-turbo"
-> ```
+> **Upgraders:** the STT engine is now selectable via `models.stt_backend`
+> (`mlx-whisper` batch or `whisperlivekit` streaming — see [STT backend](#stt-backend)
+> below), and `models.whisper` means different things for each: an HF repo ID
+> (e.g. `mlx-community/whisper-large-v3-turbo`) for `mlx-whisper`, or a
+> WhisperLiveKit model-size name (`tiny`, `base`, `small`, `medium`, `large-v3`,
+> `large-v3-turbo`) for `whisperlivekit`. Each backend rejects the other's
+> format at startup with a clear error.
 
 ## Quick start (dev)
 
@@ -91,7 +84,7 @@ uv run wyoming-mlx
 ```
 
 By default it loads:
-- whisper-large-v3-turbo (MLX, streaming) on Wyoming port 10300 / HTTP `/v1/audio/transcriptions`
+- whisper-large-v3-turbo (MLX, batch decode — see [STT backend](#stt-backend)) on Wyoming port 10300 / HTTP `/v1/audio/transcriptions`
 - Kokoro-82M (MLX) on Wyoming port 10200 / HTTP `/v1/audio/speech`
 - HTTP on port 10400 with API-key auth
 
@@ -157,14 +150,32 @@ newer; older versions still receive the final transcript exactly as before.
 
 ## Language support
 
-### STT (Whisper)
+### STT backend
+
+Two STT engines are available via `models.stt_backend` / `--stt-backend`:
+
+| Backend | Mode | Notes |
+|---|---|---|
+| `mlx-whisper` (default) | Batch — one decode per utterance, on audio-stop | Most reliable: no incremental confirmation policy to get confused, and mlx-whisper's own hallucination suppression (`no_speech_threshold`, `logprob_threshold`, `compression_ratio_threshold`) runs over the whole clip. No live partial transcripts. `models.whisper` is an HF repo id, e.g. `mlx-community/whisper-large-v3-turbo`. |
+| `whisperlivekit` | Streaming — live partial transcripts via WhisperLiveKit's AlignAtt policy | Lower perceived latency (partial results arrive while you're still speaking), but the incremental confirm/flush design can occasionally reorder the first words or hallucinate a trailing filler word ("Okay.", "Danke.") on the final flush. `models.whisper` is a WhisperLiveKit model-size name, e.g. `large-v3-turbo`. |
+
+```toml
+[models]
+stt_backend = "mlx-whisper"
+whisper = "mlx-community/whisper-large-v3-turbo"
+```
+
+Or via CLI: `wyoming-mlx --stt-backend whisperlivekit --whisper-model large-v3-turbo`
+
+### STT language (Whisper)
 
 Whisper supports ~60 languages including `en`, `de`, `it`, `es`, `ja`, and
 most other major languages. Set `--stt-language <code>` (or config key
-`wyoming.stt_language`) to the BCP-47 code for your language. **This is
-strongly recommended:** without it, Whisper auto-detects the language from
-the first audio window, which can cause the first few words to be garbled or
-appear at the end of the transcript.
+`wyoming.stt_language`) to the BCP-47 code for your language — this applies to
+either STT backend. **This is strongly recommended:** without it, Whisper
+auto-detects the language from the first audio window, which can cause the
+first few words to be garbled or (with `whisperlivekit`) appear at the end of
+the transcript.
 
 ```toml
 [wyoming]
@@ -183,7 +194,7 @@ Home Assistant will filter voices by language automatically.
 
 German voices (`df_kerstin`, …) use community voice tensors (e.g.
 [cryptomilk/kokoro-german-kerstin](https://huggingface.co/cryptomilk/kokoro-german-kerstin))
-on top of the same configured Kokoro model (`mlx-community/Kokoro-82M-bf16` by default), and require `espeak-ng`
+on top of the same configured Kokoro model (`hexgrad/Kokoro-82M` by default), and require `espeak-ng`
 for German G2P:
 
 ```bash
